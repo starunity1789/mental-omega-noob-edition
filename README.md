@@ -129,7 +129,7 @@ Requires Python 3.8+ (`pip install pillow` only if you want to regenerate the
 cameo icons; the six PCX files are already included).
 
 ```bash
-git clone https://github.com/<you>/mental-omega-athos-edition.git
+git clone https://github.com/starunity1789-bot/mental-omega-athos-edition.git
 cd mental-omega-athos-edition
 python tools/build_mod.py --game "D:/Games/Mental Omega"
 ```

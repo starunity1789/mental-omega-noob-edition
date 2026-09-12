@@ -113,7 +113,7 @@
 六个 PCX 已经在仓库里了）。
 
 ```bash
-git clone https://github.com/<你>/mental-omega-athos-edition.git
+git clone https://github.com/starunity1789-bot/mental-omega-athos-edition.git
 cd mental-omega-athos-edition
 python tools/build_mod.py --game "D:/Games/Mental Omega"
 ```
