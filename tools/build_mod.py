@@ -1,7 +1,7 @@
-"""Athos Edition patch generator for Mental Omega 3.3.6.
+"""Noob Edition patch generator for Mental Omega 3.3.6.
 
 Ships no Mental Omega content. It reads the pristine rules straight out of
-your own installation's expandmo99.mix, applies the Athos Edition changes and
+your own installation's expandmo99.mix, applies the Noob Edition changes and
 writes the result back into the game folder.
 
   python tools/build_mod.py --game "D:/Games/Mental Omega"
@@ -546,7 +546,7 @@ def build(dry=False):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Athos Edition patch generator")
+    ap = argparse.ArgumentParser(description="Noob Edition patch generator")
     ap.add_argument("--game", required=True,
                     help="path to your Mental Omega 3.3.6 installation")
     ap.add_argument("--work", default=None,

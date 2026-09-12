@@ -332,7 +332,7 @@ def main():
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Athos Edition static validation")
+    ap = argparse.ArgumentParser(description="Noob Edition static validation")
     ap.add_argument("--game", default=None,
                     help="unused, accepted so both scripts take the same flags")
     ap.add_argument("--work", default=None,

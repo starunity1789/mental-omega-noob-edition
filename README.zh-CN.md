@@ -1,4 +1,4 @@
-# 心灵终结 · Athos 特别版
+# 心灵终结 · Noob 版（菜鸟版）
 
 给 **心灵终结 3.3.6**（Mental Omega，《红色警戒2 尤里的复仇》同人资料片）做的
 单机向补丁。
@@ -113,8 +113,8 @@
 六个 PCX 已经在仓库里了）。
 
 ```bash
-git clone https://github.com/starunity1789-bot/mental-omega-athos-edition.git
-cd mental-omega-athos-edition
+git clone https://github.com/starunity1789-bot/mental-omega-noob-edition.git
+cd mental-omega-noob-edition
 python tools/build_mod.py --game "D:/Games/Mental Omega"
 ```
 

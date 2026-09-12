@@ -1,4 +1,4 @@
-# Mental Omega — Athos Edition
+# Mental Omega — Noob Edition
 
 A single-player quality-of-life patch for **Mental Omega 3.3.6** (a fan-made
 expansion for *Command & Conquer: Red Alert 2 — Yuri's Revenge*).
@@ -78,7 +78,7 @@ outage, and stay available even with *Superweapons: Off*.
 
 ### 3. Hybrid Tower tuning
 
-| Key | Stock | Athos |
+| Key | Stock | Noob |
 |---|---|---|
 | `Power` / `Powered` | -150 / yes | **0 / no** (no drain, works unpowered) |
 | `Sight` | 8 | **12** (stock +50%) |
@@ -129,8 +129,8 @@ Requires Python 3.8+ (`pip install pillow` only if you want to regenerate the
 cameo icons; the six PCX files are already included).
 
 ```bash
-git clone https://github.com/starunity1789-bot/mental-omega-athos-edition.git
-cd mental-omega-athos-edition
+git clone https://github.com/starunity1789-bot/mental-omega-noob-edition.git
+cd mental-omega-noob-edition
 python tools/build_mod.py --game "D:/Games/Mental Omega"
 ```
 
@@ -168,7 +168,7 @@ Tool output is in Chinese, since that is who this is for.
 It was also checked in game against Ares' own parser log, same map and seed,
 stock rules versus patched:
 
-| Ares log | Stock | Athos |
+| Ares log | Stock | Noob |
 |---|---:|---:|
 | `Failed to parse` | 0 | 0 |
 | `Abandoning production of` | 0 | 0 |
