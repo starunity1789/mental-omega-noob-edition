@@ -1,0 +1,40 @@
+Mental Omega - Athos Edition
+============================
+
+This project is an UNOFFICIAL, FAN-MADE, SINGLE-PLAYER-ONLY patch.
+It is not endorsed by, affiliated with, or supported by Electronic Arts
+or the Mental Omega development team.
+
+COPYRIGHT
+---------
+Command & Conquer: Red Alert 2 - Yuri's Revenge
+    (c) Electronic Arts Inc. All rights reserved.
+
+Mental Omega
+    Created by Speeder and the Mentalmeisters.
+    Powered by Ares (AlexB) and the CnCNet team.
+    All Mental Omega rules, assets, maps, artwork, text and balance design
+    are the property of their authors.
+
+NO GAME CONTENT IS DISTRIBUTED HERE
+-----------------------------------
+This repository contains only:
+  - patch scripts (tools/)
+  - six cameo icons drawn for the support powers this patch adds (cameos/)
+  - documentation (README.md, README.zh-CN.md, docs/)
+
+The patcher reads Mental Omega's pristine data out of the copy of
+expandmo99.mix inside YOUR OWN installation, applies its changes, and writes
+the result back into YOUR OWN installation. Nothing is redistributed.
+
+Mental Omega's readme asks that it not be re-uploaded without the team's
+explicit permission. Please obtain the game only from https://mentalomega.com
+
+OFFLINE USE ONLY
+----------------
+This patch modifies rulesmo.ini and therefore desynchronises online play.
+Do NOT use it on CnCNet, on LAN, or in any game with other people.
+It exists for players stuck on a campaign mission, and for players who have
+nobody to play the co-op missions with.
+
+If the Mental Omega team wants this repository taken down, it will be.

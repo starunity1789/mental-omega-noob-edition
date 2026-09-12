@@ -1,0 +1,18 @@
+# scratch + backups produced by tools/build_mod.py
+work/
+
+# python
+__pycache__/
+*.pyc
+
+# stray game files, in case anyone runs the tools inside a game folder
+*.mix
+*.map
+rulesmo.ini
+artmo.ini
+aimo.ini
+ra2md.csf
+spawn.ini
+spawnmap.ini
+debug/
+syringe.log
