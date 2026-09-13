@@ -173,3 +173,76 @@ def contact_sheet(paths, out_png, scale=4):
         sheet.paste(im, (W * i, 0))
     sheet.resize((W * len(ims) * scale, H * scale), Image.NEAREST).save(out_png)
     return out_png
+
+
+def beacon_icon(out_path):
+    """Far Star Support Beacon: a dish mast throwing a signal at a star."""
+    color, dark = (232, 196, 86), (58, 44, 12)
+    big = _backdrop((40, 48, 74), (8, 10, 20))
+    d = ImageDraw.Draw(big)
+    cx, gy = 28, 32
+    steel, edge, shade = (126, 134, 150), (200, 212, 228), (72, 80, 94)
+
+    # the star it is aimed at
+    sx, sy = 46, 11
+    for r_out, r_in, fill in ((6.5, 2.4, color), (4.2, 1.5, (255, 246, 214))):
+        pts = []
+        for i in range(10):
+            import math
+            a = -math.pi / 2 + i * math.pi / 5
+            r_ = r_out if i % 2 == 0 else r_in
+            pts.append((sx + r_ * math.cos(a), sy + r_ * math.sin(a)))
+        _poly(d, pts, fill)
+
+    d.ellipse([_p(cx - 14, gy - 3), _p(cx + 14, gy + 2)], fill=(8, 10, 18))
+    # plinth + mast
+    _poly(d, [(cx - 12, gy), (cx + 12, gy), (cx + 9, gy - 4), (cx - 9, gy - 4)], shade, edge)
+    _poly(d, [(cx - 4, gy - 4), (cx + 4, gy - 4), (cx + 2.5, gy - 18), (cx - 2.5, gy - 18)], steel, edge)
+    for yy in (gy - 8, gy - 12, gy - 16):
+        d.line([_p(cx - 3.5, yy), _p(cx + 3.5, yy)], fill=edge, width=max(1, S // 2))
+    # dish, tilted toward the star
+    _poly(d, [(cx - 2, gy - 18), (cx + 10, gy - 25), (cx + 8, gy - 30),
+              (cx - 4, gy - 23)], edge, (245, 250, 255))
+    d.line([_p(cx + 2, gy - 22), _p(cx + 7, gy - 25)], fill=shade, width=max(1, S // 2))
+    # signal arcs
+    for k, rr in enumerate((6, 9, 12)):
+        d.arc([_p(cx + 4 - rr, gy - 27 - rr), _p(cx + 4 + rr, gy - 27 + rr)],
+              start=290, end=350, fill=color, width=max(1, int(0.9 * S)))
+    _band_and_frame(big, "信标", color, dark)
+    im = _finish(big)
+    im.save(out_path)
+    return out_path
+
+
+def knights_icon(out_path):
+    """Far Star Knights Aid: a heraldic shield over an armoured column."""
+    color, dark = (206, 176, 120), (48, 38, 22)
+    big = _backdrop((52, 54, 80), (10, 10, 18))
+    d = ImageDraw.Draw(big)
+    steel, edge, shade = (124, 132, 148), (206, 216, 232), (70, 76, 92)
+
+    # three tank silhouettes receding behind the shield
+    for i, (bx, by, w) in enumerate(((9, 30, 7), (48, 30, 7), (28, 33, 9))):
+        _poly(d, [(bx - w, by), (bx + w, by), (bx + w - 2, by - 4),
+                  (bx - w + 2, by - 4)], shade, steel)
+        d.rectangle([_p(bx - w + 2, by - 7), _p(bx + w - 2, by - 4)], fill=steel, outline=edge)
+        d.line([_p(bx, by - 6), _p(bx + w + 2, by - 6)], fill=edge, width=max(1, S // 2))
+
+    # shield
+    sx, top, bot, hw = 28, 5, 27, 10
+    _poly(d, [(sx - hw, top), (sx + hw, top), (sx + hw, bot - 8),
+              (sx, bot), (sx - hw, bot - 8)], color, (250, 240, 214))
+    _poly(d, [(sx - hw + 2, top + 2), (sx + hw - 2, top + 2), (sx + hw - 2, bot - 9),
+              (sx, bot - 2.5), (sx - hw + 2, bot - 9)], (74, 60, 34))
+    # star on the shield
+    import math
+    pts = []
+    for i in range(10):
+        a = -math.pi / 2 + i * math.pi / 5
+        r_ = 6.0 if i % 2 == 0 else 2.3
+        pts.append((sx + r_ * math.cos(a), top + 9 + r_ * math.sin(a)))
+    _poly(d, pts, (252, 238, 198), (255, 255, 255))
+    _band_and_frame(big, "骑士团", color, dark)
+    im = _finish(big)
+    im.save(out_path)
+    return out_path

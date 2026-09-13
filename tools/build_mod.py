@@ -179,6 +179,32 @@ SW_TEMPLATE = [
     ("SW.AllowAI", "no"), ("SW.AllowPlayer", "yes"), ("SW.AlwaysGranted", "yes"),
 ]
 
+# ---------------------------------------------------------------------------
+# Far Star Support Beacon (远星支援信标)
+#
+# A new building every tech Construction Yard can put up. It carries one
+# support power and it is the sole key to ten of Mental Omega's stolen-tech
+# units, which normally need a spy infiltration to unlock.
+# ---------------------------------------------------------------------------
+BEACON = "SUBEACON"
+BEACON_DONOR = "GABSTA"                 # Blackout Research Station, a map prop
+BEACON_YARD_GENERIC = "ANYSUYARD"       # satisfied by any of the four SU yards
+
+BEACON_SW = "SUSWKNGT"
+BEACON_SW_DONOR = "PaladinAidSpecial"
+BEACON_SW_DELIVERS = "SREF,SREF,ABRM,ABRM,BLZZ,BLZZ,PANTHER,PANTHER,SDRN"
+BEACON_SW_COST = "-8500"
+BEACON_SW_RECHARGE = "0.25"             # 15 seconds
+
+# Stolen-tech units the beacon unlocks. Cloned rather than unlocked in place:
+# the real gate lives in INI/Game Options/Stolen Tech.ini, which overrides
+# rulesmo.ini at launch, and editing it would change ordinary skirmish play.
+BEACON_UNLOCKS = ["QUICK", "AHVYBOT2", "GRUMBLE", "MAMM", "IDRAG",
+                  "TRACTOR", "WORMQ", "PHNT", "SEITAAD", "RAMW"]
+# Transform partners of the above; cloned so a deployed clone does not hand
+# back a stock unit the player has no tech for.
+BEACON_PARTNERS = {"AHVYBOT2B": "VehicleTypes", "NAGRUM": "BuildingTypes"}
+
 # Hand tuning carried over from the user's v1 rulesmo.ini (which the first
 # rebuild-from-pristine had silently dropped), plus the requested +50% reach.
 # "v1" comments record the value the user had chosen themselves.
@@ -189,7 +215,7 @@ TUNING = {
         ("Power", "0"),              # v1 - no power drain
         ("Powered", "no"),           # v1 - works with the grid down
         ("AntiAirValue", "40"),      # v1 - AI threat weighting only
-        ("Sight", "12"),             # stock 8 +50%
+        ("Sight", "16"),             # 12 +30%, rounded up (Sight is integral)
         ("SelfHealing", "yes"),      # stands in for click-repair
     ],
     # Hybrid Tower weapons: used by GAHYBR and nothing else in all of MO.
@@ -328,7 +354,7 @@ def build(dry=False):
             rules.set_key(sect, k, v)
             n_tune += 1
     say(f"[rules] 手工调参：{len(TUNING)} 个段 / {n_tune} 个键"
-        f"（混合塔不耗电+射程/视野=原版+50%+自愈+对空）")
+        f"（混合塔不耗电+射程原版+50%+视野16+自愈+对空）")
 
     # ======================================================================
     # 2. the new content -- appended into rulesmo.ini itself
@@ -361,8 +387,15 @@ def build(dry=False):
     for L, t in g2:
         new_by_list[L].append(clone_id[t])
 
+    beacon_clone = {u: P + u for u in BEACON_UNLOCKS}
+    beacon_clone.update({u: P + u for u in BEACON_PARTNERS})
+    new_by_list["BuildingTypes"].append(BEACON)
+    for u, L in BEACON_PARTNERS.items():
+        new_by_list[L].append(beacon_clone[u])
+    for u in BEACON_UNLOCKS:
+        new_by_list["VehicleTypes"].append(beacon_clone[u])
     new_by_list["Projectiles"] = ["InvisibleHighAA"]
-    new_by_list["SuperWeaponTypes"] = [x[0] for x in SUPERWEAPONS]
+    new_by_list["SuperWeaponTypes"] = [x[0] for x in SUPERWEAPONS] + [BEACON_SW]
     n_reg = 0
     for L, vals in new_by_list.items():
         if vals:
@@ -442,6 +475,89 @@ def build(dry=False):
         sec(new_id, list(d.items()),
             f"{SIDES[side][0]} {t} tech-tree copy - requires {conyard_clone[side]}")
 
+    # --- Far Star Support Beacon -------------------------------------------
+    rules.set_key("GenericPrerequisites", BEACON_YARD_GENERIC,
+                  ",".join(FACTION[cy][2] for cy in SIDES))
+
+    d = dict(rules.items(BEACON_DONOR))
+    # the donor is a decorative map prop; make it behave like a real building
+    for k in ("Insignificant", "Nominal", "Unsellable"):
+        d.pop(k, None)
+    d.update({
+        "UIName": f"NAME:{BEACON}",
+        "Name": "Far Star Support Beacon",
+        "Image": BEACON_DONOR,          # 3x3 foundation + ActiveAnim come along
+        "Owner": ALL12_STR,
+        "Prerequisite": BEACON_YARD_GENERIC,
+        "TechLevel": "1",
+        "BuildCat": "Tech",
+        "Armor": "concrete_b",
+        "Strength": "2000",
+        "Sight": "6",
+        "Cost": "2500",
+        "Soylent": "1250",
+        "Points": "300",
+        "Power": "-200",
+        "Powered": "yes",
+        "BaseNormal": "yes",
+        "Capturable": "false",
+        "AIBuildThis": "no",
+        "SuperWeapons": BEACON_SW,
+    })
+    sec(BEACON, list(d.items()),
+        "Far Star Support Beacon - buildable from any SU tech Construction "
+        "Yard; carries the Knights support power and unlocks the ten units "
+        "below. NB: the donor art has no Buildup=, so it pops in without a "
+        "construction animation. Cosmetic only.")
+
+    d = dict(rules.items(BEACON_SW_DONOR))
+    for k in ("SW.RequiredHouses", "SW.AuxBuildings", "SW.AITargeting.Constraints"):
+        d.pop(k, None)
+    d.update({
+        "UIName": f"NAME:{BEACON_SW}",
+        "Name": "Far Star Knights Aid",
+        "IsPowered": "true",            # goes offline with the grid, as asked
+        "Money.Amount": BEACON_SW_COST,
+        "RechargeTime": BEACON_SW_RECHARGE,
+        "Range": "1.5",                 # same as MO's own 10-unit delivery
+        "Deliver.Types": BEACON_SW_DELIVERS,
+        "SidebarPCX": "suckngt.pcx",
+        "SW.AITargeting": "none",
+        "SW.UseAITargeting": "no",
+        "SW.AllowAI": "no",
+        "SW.AllowPlayer": "yes",
+    })
+    sec(BEACON_SW, list(d.items()),
+        "Far Star Knights Aid - 2x Prism/Abrams/Blizzard/Paladin + 1 repair "
+        "drone, 8500 credits, 15s recharge")
+
+    # the ten stolen-tech units, plus their transform partners
+    for u in BEACON_UNLOCKS + list(BEACON_PARTNERS):
+        d = dict(rules.items(u))
+        d["Owner"] = ALL12_STR
+        d.pop("RequiredHouses", None)
+        d.pop("ForbiddenHouses", None)
+        if "FactoryOwners" in d:
+            d["FactoryOwners"] = ALL12_STR
+        d["Image"] = rules.get(u, "Image") or u
+        for k in ("Convert.Deploy", "Convert.Water", "Convert.Land",
+                  "Convert.Script", "UndeploysInto", "DeploysInto",
+                  "UpgradesTo", "Spawns", "PowersUpBuilding"):
+            if k in d:
+                d[k] = ",".join(beacon_clone.get(x, x) for x in split_list(d[k]))
+        d["AIBuildThis"] = "no"
+        if u in BEACON_PARTNERS:
+            # reached only by transforming its partner, never built directly
+            d["TechLevel"] = "-1"
+            d.pop("Prerequisite", None)
+            note = f"{u} copy - transform partner, not buildable"
+        else:
+            # any faction's war factory, but only with the beacon standing
+            d["Prerequisite"] = f"FACTORY,{BEACON}"
+            d["TechLevel"] = "10"
+            note = f"{u} copy - any war factory + {BEACON}"
+        sec(beacon_clone[u], list(d.items()), note)
+
     # --- superweapons ------------------------------------------------------
     for sw, deliver, cam, en_name, cn in SUPERWEAPONS:
         pairs = [("UIName", f"NAME:{sw}"), ("Name", en_name)]
@@ -472,6 +588,9 @@ def build(dry=False):
     for sw, deliver, cam, en_name, cn in SUPERWEAPONS:
         csf.set(f"NAME:{sw}", cn)
         added += 1
+    csf.set(f"NAME:{BEACON}", "远星支援信标")
+    csf.set(f"NAME:{BEACON_SW}", "远星骑士团支援")
+    added += 2
     say(f"[csf] 新增字符串：{added} 条")
 
     # ======================================================================

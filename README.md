@@ -81,7 +81,7 @@ outage, and stay available even with *Superweapons: Off*.
 | Key | Stock | Noob |
 |---|---|---|
 | `Power` / `Powered` | -150 / yes | **0 / no** (no drain, works unpowered) |
-| `Sight` | 8 | **12** (stock +50%) |
+| `Sight` | 8 | **16** |
 | Weapon range | 14 / 15 | **21 / 22.5** (stock +50%) |
 | `Strength` | 1050 | **3333** |
 | `SelfHealing` | — | **yes** |
@@ -111,11 +111,46 @@ Every registered type is classified by that formula:
 |---|---:|---|---|
 | Effective owners already cover a whole faction | 188 | open to all 12 countries | **none** |
 | Sub-faction exclusive | 94 | **cloned** into new `SU*` entries; the originals are not touched | **none** |
+| Stolen-tech units behind the beacon | 10 (+2 partners) | cloned; gated on the beacon | **none** |
 | Props, spawned objects, projectiles | rest | untouched | — |
 
 The clones require the tech Construction Yard, so a normal player — who only
 ever has their own stock yard — can never see them. Euro Alliance's Cavalier
 stays Euro Alliance's.
+
+### 5. Far Star Support Beacon
+
+A new building any tech Construction Yard can put up. It is a rebuild of Mental
+Omega's *Blackout Research Station* prop — the donor art has no `Buildup=`, so
+it appears without a construction animation. Cosmetic only.
+
+It does two things.
+
+**Carries the Far Star Knights Aid support power** — built from MO's own
+`PaladinAidSpecial`, so it behaves like a stock power:
+
+| | |
+|---|---|
+| Delivers | 2x Prism Tank, 2x Abrams, 2x Blizzard, 2x Paladin Hunter, 1x Repair Drone |
+| Cost | 8500 |
+| Recharge | 15 seconds |
+| Power | goes offline with the grid |
+
+**Unlocks ten stolen-tech units at any faction's war factory**: Quickshifter,
+Future Tank Alpha, Grumble AA, Apocalypse, Iron Dragon, Scavenger, Worm Queen,
+Phantom MLRS, Seitaad Ballista, Ram.
+
+Those ten are normally locked behind a spy infiltration, and the gate does not
+live in `rulesmo.ini` at all — it is in `INI/Game Options/Stolen Tech.ini`,
+which the client merges into the map at launch and which therefore *overrides*
+the rules. Editing that file would hand every player the ten units without a
+spy, so the patch clones them instead: `SU*` copies whose prerequisite is
+`FACTORY` plus the beacon. The stock ten are left byte for byte alone and
+`Stolen Tech.ini` is never touched, which keeps the regression proof valid.
+
+The two units that transform (Future Tank Alpha, Grumble) get their partners
+cloned too, so a deployed clone never hands back a stock unit the player has no
+tech for.
 
 ---
 
@@ -164,6 +199,9 @@ Tool output is in Chinese, since that is who this is for.
   proof that ordinary skirmish and campaign play are unchanged.
 - **Unlock coverage** — with a foreign tech Construction Yard, **100 %** of
   that faction's exclusive buildable content becomes reachable.
+- **Beacon gate** — the ten stolen-tech clones are unbuildable without the
+  beacon standing and all ten are buildable with it, and the ten stock entries
+  are compared key by key against pristine to prove they never moved.
 
 It was also checked in game against Ares' own parser log, same map and seed,
 stock rules versus patched:

@@ -200,6 +200,14 @@ def main():
     else:
         print(f"  ok   新段的 Image 全部指向已有美术条目")
 
+    sw_reg = set(m.list_values("SuperWeaponTypes"))
+    for s2 in su_sections:
+        for k in ("SuperWeapon", "SuperWeapon2", "SuperWeapons"):
+            for tok in split_list(m.get(s2, k) or ""):
+                if tok not in sw_reg:
+                    fail(f"[{s2}] {k} 引用了未注册的超武 {tok}")
+    print("  ok   新建筑挂载的超武都已注册")
+
     # a clone that converts/deploys into another cloned type must point at the
     # clone, not at the stock partner the player has no tech for
     clone_names = {x for x in su_sections if x.startswith(NEW_PREFIX)}
@@ -233,7 +241,7 @@ def main():
             im = Image.open(os.path.join(CAMEOS, f))
             if im.size != (60, 48) or im.mode != "P":
                 fail(f"图标 {f} 规格错误: {im.size} {im.mode}")
-        print("  ok   6 个图标均为 60x48 8位带调色板 PCX")
+        print(f"  ok   {len(os.listdir(CAMEOS))} 个图标均为 60x48 8位带调色板 PCX")
     except ImportError:
         warn("PIL 不可用，跳过图标检查")
 
@@ -323,6 +331,51 @@ def main():
                   f"   (另有 {len(miss) - len(real_miss)} 个召唤物不进侧边栏)")
             if real_miss:
                 fail(f"{ocn}+{cn}: 有 {len(real_miss)} 个真实可建造项未解锁: {real_miss[:8]}")
+
+    # ==================================================================
+    print()
+    print("=" * 64)
+    print("D. 远星支援信标：解锁门是否真的成立")
+    print("=" * 64)
+    BEACON = "SUBEACON"
+    TEN = ["SUQUICK", "SUAHVYBOT2", "SUGRUMBLE", "SUMAMM", "SUIDRAG",
+           "SUTRACTOR", "SUWORMQ", "SUPHNT", "SUSEITAAD", "SURAMW"]
+    country = "Chinese"                       # a Soviet player, arbitrary pick
+    # closure() would happily build the beacon itself, so the gate has to be
+    # probed directly against an explicit set of owned buildings.
+    base = {"NACNST", "NAWEAP", "NAPOWR", "NAREFN", "SUGACNST", "GAWEAP"}
+    without = [u for u in TEN if t_new.buildable_by(u, country, base)]
+    withb = [u for u in TEN if t_new.buildable_by(u, country, base | {BEACON})]
+    no_yard = closure(t_new, country, {"NACNST"})
+    with_yard = closure(t_new, country, {"NACNST", "SUGACNST"})
+    with_beacon = set(withb)
+    leaked = without
+    if BEACON not in with_yard:
+        fail(f"有科技建造场却造不出 {BEACON}")
+    else:
+        print(f"  ok   有任一科技建造场 -> 可造 {BEACON}")
+    if BEACON in no_yard:
+        fail(f"没有科技建造场也能造 {BEACON}")
+    else:
+        print(f"  ok   没有科技建造场 -> 造不出 {BEACON}")
+    if leaked:
+        fail(f"没建信标就能造: {leaked}")
+    else:
+        print(f"  ok   没建信标 -> 10 个单位一个都造不出")
+    missing = [u for u in TEN if u not in with_beacon]
+    if missing:
+        fail(f"建了信标仍造不出: {missing}")
+    else:
+        print(f"  ok   建了信标 -> 10 个单位全部可造")
+    # the stock stolen-tech units must not have moved
+    stock_ten = ["QUICK", "AHVYBOT2", "GRUMBLE", "MAMM", "IDRAG",
+                 "TRACTOR", "WORMQ", "PHNT", "SEITAAD", "RAMW"]
+    moved = [u for u in stock_ten
+             if dict(t_old.ini.items(u)) != dict(m.items(u))]
+    if moved:
+        fail(f"原版偷取科技单位被改动了: {moved}")
+    else:
+        print("  ok   原版那 10 个偷取科技单位逐键未改动")
 
     print()
     print("=" * 64)
