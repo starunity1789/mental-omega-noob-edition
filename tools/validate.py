@@ -377,6 +377,88 @@ def main():
     else:
         print("  ok   原版那 10 个偷取科技单位逐键未改动")
 
+    # ==================================================================
+    print()
+    print("=" * 64)
+    print("E. 英雄步兵 / 作战实验室 / 合作任务归属")
+    print("=" * 64)
+    HERO_ARMORS = {"tany", "krukov", "moral", "f_hero", "yunru", "under",
+                   "libra", "librc", "rahn", "sib_fin", "sib_ali", "eureka",
+                   "sieg", "c_hero", "c_hero2"}
+    stock_heroes = [x for x in t_old.registered["InfantryTypes"]
+                    if (t_old.ini.get(x, "Armor") or "").strip() in HERO_ARMORS
+                    and x != "AIMORA"]
+    hero_clones = [NEW_PREFIX + x for x in stock_heroes]
+    absent = [h for h in hero_clones if h not in secs]
+    if absent:
+        fail(f"英雄克隆缺失: {absent[:6]}")
+    else:
+        print(f"  ok   {len(hero_clones)} 个英雄步兵克隆全部存在")
+    base = {"NACNST", "NAHAND", "NAPOWR", "NAREFN", "SUGACNST", "GAPILE"}
+    leaked = [h for h in hero_clones if t_new.buildable_by(h, "Chinese", base)]
+    got = [h for h in hero_clones
+           if t_new.buildable_by(h, "Chinese", base | {"SUBEACON"})]
+    if leaked:
+        fail(f"没建信标就能造的英雄: {leaked[:6]}")
+    else:
+        print("  ok   没建信标 -> 英雄一个都造不出")
+    if len(got) != len(hero_clones):
+        fail(f"建了信标仍造不出: {sorted(set(hero_clones) - set(got))[:6]}")
+    else:
+        print(f"  ok   信标 + 任意兵营 -> {len(got)} 个英雄全部可造")
+    # The gate keys are touched by the group-1 Owner pass, whose harmlessness
+    # part B already proves. Everything else about a stock hero must be
+    # untouched -- no stats, no weapons, no art.
+    GATE = {"Owner", "RequiredHouses", "ForbiddenHouses", "FactoryOwners",
+            "Prerequisite"}
+    def body(d):
+        return {k: v for k, v in d.items() if k not in GATE}
+    moved = [x for x in stock_heroes
+             if body(dict(t_old.ini.items(x))) != body(dict(m.items(x)))]
+    if moved:
+        fail(f"原版英雄的非门键被改动了: {moved[:6]}")
+    else:
+        gated = [x for x in stock_heroes
+                 if dict(t_old.ini.items(x)) != dict(m.items(x))]
+        print(f"  ok   原版 {len(stock_heroes)} 个英雄：数值/武器/美术逐键未改动"
+              f"（其中 {len(gated)} 个的门键随第1组一起开放，已由 B 段证明无影响）")
+
+    LAB, LABC = "GATECH", NEW_PREFIX + "GATECH"
+    if LABC not in secs:
+        fail(f"{LABC} 不存在")
+    elif t_new.buildable_by(LABC, "Chinese", {"SUGACNST"}):
+        print(f"  ok   只有盟军科技建造场 -> 可造 {LABC}（盟军作战实验室）")
+    else:
+        fail(f"有 SUGACNST 却造不出 {LABC}")
+    if t_new.buildable_by(LABC, "Chinese", {"NACNST", "NAHAND"}):
+        fail(f"没有盟军科技建造场也能造 {LABC}")
+    else:
+        print(f"  ok   没有盟军科技建造场 -> 造不出 {LABC}")
+    if dict(t_old.ini.items(LAB)) != dict(m.items(LAB)):
+        diff = {k for k in set(dict(t_old.ini.items(LAB))) | set(dict(m.items(LAB)))
+                if t_old.ini.get(LAB, k) != m.get(LAB, k)}
+        print(f"  note 原版 {LAB} 变动的键: {sorted(diff)}（Owner 开放属预期）")
+    else:
+        print(f"  ok   原版 {LAB} 逐键未改动")
+
+    import re as _re
+    coop_dir = os.path.join(OUT, "Cooperative")
+    left, checked = [], 0
+    for fn in sorted(os.listdir(coop_dir)):
+        if not fn.lower().endswith(".map"):
+            continue
+        checked += 1
+        mp = Ini(os.path.join(coop_dir, fn))
+        for sect in ("Events", "Actions"):
+            for start, end in mp.sections.get(sect, []):
+                for i in range(start + 1, end):
+                    if _re.search(r"(^|,)4476(,|$)", mp.lines[i].split("=", 1)[-1]):
+                        left.append(f"{fn}:{sect}")
+    if left:
+        fail(f"合作地图仍残留 2 号位引用: {sorted(set(left))[:5]}")
+    else:
+        print(f"  ok   {checked} 张合作地图的事件/动作里已无 2 号位(4476)引用")
+
     print()
     print("=" * 64)
     print(f"结果：{len(fails)} 个错误，{len(warns)} 个警告")

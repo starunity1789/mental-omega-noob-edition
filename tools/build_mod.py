@@ -205,6 +205,39 @@ BEACON_UNLOCKS = ["QUICK", "AHVYBOT2", "GRUMBLE", "MAMM", "IDRAG",
 # back a stock unit the player has no tech for.
 BEACON_PARTNERS = {"AHVYBOT2B": "VehicleTypes", "NAGRUM": "BuildingTypes"}
 
+# ---------------------------------------------------------------------------
+# Allied Battle Lab (盟军作战实验室 = stock GATECH)
+#
+# Some campaign/co-op maps lock the Allied high-tech branch through their own
+# INI overrides, which target the stock ID. A clone gated purely on the Allied
+# tech Construction Yard is out of their reach.
+# ---------------------------------------------------------------------------
+LAB_CLONES = {"GATECH": "GACNST"}        # cloned building -> gating SU yard
+
+# ---------------------------------------------------------------------------
+# Hero infantry (英雄级步兵)
+#
+# Identified from MO's own [ArmorTypes] "Heroes Infantry Group" block rather
+# than by name, so the list cannot drift. Unlocked at any faction's barracks
+# once the Far Star Support Beacon stands.
+# ---------------------------------------------------------------------------
+HERO_ARMORS = {"tany", "krukov", "moral", "f_hero", "yunru", "under", "libra",
+               "librc", "rahn", "sib_fin", "sib_ali", "eureka", "sieg",
+               "c_hero", "c_hero2"}
+# AIMORA is the AI-only duplicate of MORALES (its prerequisite carries AILOCK).
+HERO_SKIP = {"AIMORA"}
+
+# ---------------------------------------------------------------------------
+# Co-op: hand the ally's half of the mission to player 1
+#
+# Every co-op map scripts two player slots. 4475/4476 are the map-format codes
+# for "player at position 1/2"; rewriting 4476 -> 4475 across the trigger data
+# makes slot 2's units, reinforcements and objective triggers all belong to
+# slot 1, so one person can run missions that need both halves played actively.
+# ---------------------------------------------------------------------------
+COOP_P2 = "4476"
+COOP_P1 = "4475"
+
 # Hand tuning carried over from the user's v1 rulesmo.ini (which the first
 # rebuild-from-pristine had silently dropped), plus the requested +50% reach.
 # "v1" comments record the value the user had chosen themselves.
@@ -286,13 +319,15 @@ def build(dry=False):
     # --- name the OR-generics we need -------------------------------------
     existing = {s.upper() for s in rules.section_names()} | set(tree.generics)
     generic_for = {}
-    for t in list(SIDES) + g2_buildings:
+    for t in list(SIDES) + g2_buildings + list(LAB_CLONES):
         name = "ANY" + t
         assert name.upper() not in existing, f"generic name collision: {name}"
         generic_for[t] = name
     conyard_clone = {cy: FACTION[cy][2] for cy in SIDES}
+    lab_clone = {b: P + b for b in LAB_CLONES}
     all_clone = dict(clone_id)
     all_clone.update(conyard_clone)
+    all_clone.update(lab_clone)
 
     # ======================================================================
     # 1. rulesmo.ini — edits to existing entries
@@ -316,7 +351,8 @@ def build(dry=False):
         f"RequiredHouses/ForbiddenHouses/FactoryOwners）")
 
     # 1b/1c. AND-style Prerequisite lines: swap gated tokens for OR-generics
-    and_map = {t: generic_for[t] for t in list(SIDES) + g2_buildings}
+    and_map = {t: generic_for[t] for t in list(SIDES) + g2_buildings
+               + list(LAB_CLONES)}
     n_pre = 0
     for sec in rules.section_names():
         for key in ("Prerequisite", "Prerequisite.List0", "Prerequisite.List1",
@@ -389,7 +425,13 @@ def build(dry=False):
 
     beacon_clone = {u: P + u for u in BEACON_UNLOCKS}
     beacon_clone.update({u: P + u for u in BEACON_PARTNERS})
+    hero_ids = [x for x in rules.list_values("InfantryTypes")
+                if (rules.get(x, "Armor") or "").strip() in HERO_ARMORS
+                and x not in HERO_SKIP]
+    hero_clone = {u: P + u for u in hero_ids}
+    new_by_list["InfantryTypes"].extend(hero_clone[u] for u in hero_ids)
     new_by_list["BuildingTypes"].append(BEACON)
+    new_by_list["BuildingTypes"].extend(lab_clone[b] for b in LAB_CLONES)
     for u, L in BEACON_PARTNERS.items():
         new_by_list[L].append(beacon_clone[u])
     for u in BEACON_UNLOCKS:
@@ -558,6 +600,48 @@ def build(dry=False):
             note = f"{u} copy - any war factory + {BEACON}"
         sec(beacon_clone[u], list(d.items()), note)
 
+    # --- Allied Battle Lab copy --------------------------------------------
+    for b, yard_key in LAB_CLONES.items():
+        yard = conyard_clone[yard_key]
+        d = dict(rules.items(b))
+        d["Owner"] = ALL12_STR
+        d.pop("RequiredHouses", None)
+        d.pop("ForbiddenHouses", None)
+        if "FactoryOwners" in d:
+            d["FactoryOwners"] = ALL12_STR
+        d["Image"] = rules.get(b, "Image") or b
+        d["Prerequisite"] = yard          # the yard alone, nothing else
+        d["AIBuildThis"] = "no"
+        sec(lab_clone[b], list(d.items()),
+            f"{b} copy - {yard} is the only requirement, so map INI overrides "
+            f"that lock the stock branch cannot reach it")
+    # let it satisfy the engine's TECH generic as well; normal players cannot
+    # build it, so this changes nothing for them
+    tech = split_list(rules.get("General", "PrerequisiteTech") or "")
+    rules.set_key("General", "PrerequisiteTech",
+                  ",".join(tech + [lab_clone[b] for b in LAB_CLONES]))
+
+    # --- hero infantry ------------------------------------------------------
+    for u in hero_ids:
+        d = dict(rules.items(u))
+        d["Owner"] = ALL12_STR
+        d.pop("RequiredHouses", None)
+        d.pop("ForbiddenHouses", None)
+        if "FactoryOwners" in d:
+            d["FactoryOwners"] = ALL12_STR
+        d["Image"] = rules.get(u, "Image") or u
+        for k in ("Convert.Deploy", "Convert.Water", "Convert.Land",
+                  "Convert.Script", "UndeploysInto", "DeploysInto",
+                  "UpgradesTo", "Spawns", "PowersUpBuilding"):
+            if k in d:
+                d[k] = ",".join(hero_clone.get(x, x) for x in split_list(d[k]))
+        d["Prerequisite"] = f"BARRACKS,{BEACON}"
+        d["TechLevel"] = "10"
+        d["AIBuildThis"] = "no"
+        sec(hero_clone[u], list(d.items()),
+            f"{u} copy - any barracks + {BEACON}")
+    say(f"[rules] 英雄步兵解锁：{len(hero_ids)} 个（任意兵营 + {BEACON}）")
+
     # --- superweapons ------------------------------------------------------
     for sw, deliver, cam, en_name, cn in SUPERWEAPONS:
         pairs = [("UIName", f"NAME:{sw}"), ("Name", en_name)]
@@ -635,6 +719,46 @@ def build(dry=False):
         mp.save(os.path.join(coop_out, fn))
     say(f"[maps] 合作地图去掉 MultiplayerOnly：{n_map} / "
         f"{len(os.listdir(coop_src))} 张")
+
+    # hand slot 2's half of every co-op mission to slot 1
+    n_ev = n_ac = n_maps2 = 0
+    for fn in sorted(os.listdir(coop_out)):
+        if not fn.lower().endswith(".map"):
+            continue
+        path = os.path.join(coop_out, fn)
+        mp = Ini(path, encoding="latin-1")
+        touched = False
+        for sect, per_slot in (("Events", 3), ("Actions", 8)):
+            for start, end in mp.sections.get(sect, []):
+                for i in range(start + 1, end):
+                    line = mp.lines[i]
+                    if COOP_P2 not in line or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    parts = val.split(",")
+                    try:
+                        n = int(parts[0])
+                    except ValueError:
+                        continue
+                    hit = False
+                    for j in range(n):
+                        for off in range(1 + j * per_slot,
+                                         min(1 + (j + 1) * per_slot, len(parts))):
+                            if parts[off].strip() == COOP_P2:
+                                parts[off] = COOP_P1
+                                hit = True
+                    if hit:
+                        mp.lines[i] = key + "=" + ",".join(parts)
+                        touched = True
+                        if sect == "Events":
+                            n_ev += 1
+                        else:
+                            n_ac += 1
+        if touched:
+            mp.save(path)
+            n_maps2 += 1
+    say(f"[maps] 合作任务 2 号位并入 1 号位：{n_maps2} 张图，"
+        f"事件 {n_ev} 条 + 动作 {n_ac} 条")
 
     # ======================================================================
     # write everything out

@@ -49,7 +49,16 @@ Mental Omega locks them in three separate places; all three are cleared:
 | `MentalOmegaMaps.ini`, each of the 36 per-map entries | `MultiplayerOnly` |
 | The 36 `.map` files, `[Basic]` | `MultiplayerOnly` |
 
-The maps keep `MinPlayer=2`, so **put an AI ally in slot 2**. That is
+**Slot 2's half of the mission is handed to slot 1.** Several co-op missions
+need both players doing something deliberate at the same time, which an AI
+ally cannot manage. Every co-op map scripts two player slots through the map
+format's `4475` / `4476` house codes; the patch rewrites `4476` to `4475`
+across all trigger events and actions, so slot 2's starting units, its
+reinforcements and its objective triggers all belong to you. 36 maps,
+105 events and 149 actions.
+
+The maps keep `MinPlayer=2`, so **still put an AI ally in slot 2** — it simply
+has nothing to do now, which keeps any house-referencing trigger alive. That is
 deliberate: several missions' win/lose triggers reference the second house, and
 the client builds the scripted enemy AI from each map's own `EnemyHouse0/1`
 entries, so the mission plays out properly.
@@ -112,6 +121,8 @@ Every registered type is classified by that formula:
 | Effective owners already cover a whole faction | 188 | open to all 12 countries | **none** |
 | Sub-faction exclusive | 94 | **cloned** into new `SU*` entries; the originals are not touched | **none** |
 | Stolen-tech units behind the beacon | 10 (+2 partners) | cloned; gated on the beacon | **none** |
+| Hero infantry | 24 | cloned; gated on the beacon | **none** |
+| Allied Battle Lab | 1 | cloned; gated on the Allied tech yard | **none** |
 | Props, spawned objects, projectiles | rest | untouched | — |
 
 The clones require the tech Construction Yard, so a normal player — who only
@@ -151,6 +162,27 @@ spy, so the patch clones them instead: `SU*` copies whose prerequisite is
 The two units that transform (Future Tank Alpha, Grumble) get their partners
 cloned too, so a deployed clone never hands back a stock unit the player has no
 tech for.
+
+### 6. Allied Battle Lab, mission-proof
+
+Some maps lock the Allied high-tech branch with their own INI overrides, and
+those overrides name the stock `GATECH`. The patch adds `SUGATECH`, a copy
+whose only prerequisite is the Allied tech Construction Yard — nothing a map
+can reach. It also joins `[General] PrerequisiteTech`, so anything that asks
+for a generic tech building accepts it.
+
+### 7. Hero infantry
+
+All **24** hero infantry — Tanya, Siegfried, Volkov, Morales, Yunru, Rahn,
+Libra, Eureka, Yuri, Reznov, Krukov, Rhad and the rest — become buildable at
+**any faction's barracks** once the Far Star Support Beacon stands.
+
+They are identified from Mental Omega's own `[ArmorTypes]` *Heroes Infantry
+Group* block rather than by name, so the list cannot drift if MO renames
+anything. `AIMORA`, the AI-only duplicate of Morales, is skipped.
+
+As everywhere else, these are `SU*` clones; the stock heroes keep their own
+prerequisites untouched.
 
 ---
 
@@ -202,6 +234,11 @@ Tool output is in Chinese, since that is who this is for.
 - **Beacon gate** — the ten stolen-tech clones are unbuildable without the
   beacon standing and all ten are buildable with it, and the ten stock entries
   are compared key by key against pristine to prove they never moved.
+- **Hero gate** — same proof for the 24 hero clones, plus a key-by-key check
+  that no stock hero's stats, weapons or art changed.
+- **Battle Lab gate** — `SUGATECH` needs the Allied tech yard and nothing else.
+- **Co-op ownership** — no reference to slot 2 survives in any co-op map's
+  events or actions.
 
 It was also checked in game against Ares' own parser log, same map and seed,
 stock rules versus patched:
