@@ -459,6 +459,24 @@ def main():
     else:
         print(f"  ok   {checked} 张合作地图的事件/动作里已无 2 号位(4476)引用")
 
+    # the ally slot must be optional: with slot 2's half handed to slot 1, an
+    # ally house would own nothing and the engine defeats it on frame 1.
+    bad_min = [fn for fn in sorted(os.listdir(coop_dir))
+               if fn.lower().endswith(".map")
+               and Ini(os.path.join(coop_dir, fn)).get("Basic", "MinPlayer") != "1"]
+    if bad_min:
+        fail(f"{len(bad_min)} 张地图的 [Basic] MinPlayer 仍不是 1: {bad_min[:4]}")
+    else:
+        print(f"  ok   {checked} 张合作地图 [Basic] MinPlayer=1（可单人开局）")
+    mm = Ini(os.path.join(OUT, "INI", "MentalOmegaMaps.ini"), encoding="utf-8-sig")
+    bad_cl = [x for x in mm.section_names()
+              if x.lower().startswith("mapsmo" + chr(92) + "cooperative" + chr(92))
+              and mm.get(x, "MinPlayers") != "1"]
+    if bad_cl:
+        fail(f"{len(bad_cl)} 个客户端条目的 MinPlayers 仍不是 1")
+    else:
+        print("  ok   36 个客户端条目 MinPlayers=1（大厅允许一个人开始）")
+
     print()
     print("=" * 64)
     print(f"结果：{len(fails)} 个错误，{len(warns)} 个警告")

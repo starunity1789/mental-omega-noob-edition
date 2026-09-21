@@ -694,7 +694,21 @@ def build(dry=False):
         if sec2.lower().startswith(r"mapsmo\cooperative" + "\\") and maps.get(sec2, "MultiplayerOnly"):
             maps.delete_key(sec2, "MultiplayerOnly")
             n_map_sec += 1
+    # (c) let the mission start with one player. Slot 2's half of the mission
+    #     is handed to slot 1 below, so an ally house would own nothing and the
+    #     engine would declare it defeated on the first frame -- which is what
+    #     failed the mission. With MinPlayers=1 the slot simply stays empty.
+    #     The scripted enemies are unaffected: the client builds them from each
+    #     entry's own EnemyHouse0/EnemyHouse1, not from the player slots.
+    n_solo = 0
+    for sec2 in maps.section_names():
+        if (sec2.lower().startswith(r"mapsmo\cooperative" + "\\")
+                and maps.get(sec2, "MinPlayers") == "2"):
+            maps.set_key(sec2, "MinPlayers", "1")
+            n_solo += 1
     say(f"[maps] 删除联机限制：模式段 {n_mode} 行 + 地图条目 {n_map_sec} 处")
+    say(f"[maps] 合作地图允许单人开局：MinPlayers 2->1，{n_solo} 张")
+    assert n_solo == 36, f"expected 36 entries, changed {n_solo}"
     assert n_mode == 6, f"expected 6 mode lines, removed {n_mode}"
     assert n_map_sec == 36, f"expected 36 map entries, cleared {n_map_sec}"
 
@@ -708,7 +722,7 @@ def build(dry=False):
     coop_src = os.path.join(BACKUP, "Cooperative")
     coop_out = os.path.join(OUTPUT, "Cooperative")
     os.makedirs(coop_out, exist_ok=True)
-    n_map = 0
+    n_map = n_min = 0
     for fn in sorted(os.listdir(coop_src)):
         if not fn.lower().endswith(".map"):
             continue
@@ -716,9 +730,12 @@ def build(dry=False):
         if mp.get("Basic", "MultiplayerOnly"):
             mp.delete_key("Basic", "MultiplayerOnly")
             n_map += 1
+        if mp.get("Basic", "MinPlayer") == "2":
+            mp.set_key("Basic", "MinPlayer", "1")
+            n_min += 1
         mp.save(os.path.join(coop_out, fn))
     say(f"[maps] 合作地图去掉 MultiplayerOnly：{n_map} / "
-        f"{len(os.listdir(coop_src))} 张")
+        f"{len(os.listdir(coop_src))} 张，[Basic] MinPlayer 2->1：{n_min} 张")
 
     # hand slot 2's half of every co-op mission to slot 1
     n_ev = n_ac = n_maps2 = 0

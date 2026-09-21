@@ -57,8 +57,16 @@ across all trigger events and actions, so slot 2's starting units, its
 reinforcements and its objective triggers all belong to you. 36 maps,
 105 events and 149 actions.
 
-The maps keep `MinPlayer=2`, so **still put an AI ally in slot 2** — it simply
-has nothing to do now, which keeps any house-referencing trigger alive. That is
+**Play them alone — do not add an AI ally.** Once slot 2 owns nothing the
+engine declares that house defeated on the first frame, and a defeated ally
+fails the mission. So the patch also drops `MinPlayers` to 1, in the client's
+map entries and in each map's `[Basic]`, and the slot simply stays empty. The
+scripted enemies are unaffected: the client builds them from each entry's own
+`EnemyHouse0` / `EnemyHouse1`, which have nothing to do with the player slots.
+
+None of the 36 maps ever fails the player by trigger — every win/lose action
+targets the enemy slots `4477` / `4478`. The instant failure came purely from
+the engine's own "house with nothing left is defeated" rule. That is
 deliberate: several missions' win/lose triggers reference the second house, and
 the client builds the scripted enemy AI from each map's own `EnemyHouse0/1`
 entries, so the mission plays out properly.
@@ -238,7 +246,7 @@ Tool output is in Chinese, since that is who this is for.
   that no stock hero's stats, weapons or art changed.
 - **Battle Lab gate** — `SUGATECH` needs the Allied tech yard and nothing else.
 - **Co-op ownership** — no reference to slot 2 survives in any co-op map's
-  events or actions.
+  events or actions, and every map plus every client entry accepts one player.
 
 It was also checked in game against Ares' own parser log, same map and seed,
 stock rules versus patched:
