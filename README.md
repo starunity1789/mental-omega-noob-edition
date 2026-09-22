@@ -53,9 +53,18 @@ Mental Omega locks them in three separate places; all three are cleared:
 need both players doing something deliberate at the same time, which an AI
 ally cannot manage. Every co-op map scripts two player slots through the map
 format's `4475` / `4476` house codes; the patch rewrites `4476` to `4475`
-across all trigger events and actions, so slot 2's starting units, its
+across all trigger events and actions **and** rewrites `House=<Player @ B>`
+to `<Player @ A>` on every TeamType, so slot 2's starting units, its
 reinforcements and its objective triggers all belong to you. 36 maps,
-105 events and 149 actions.
+105 events, 149 actions and 435 team assignments.
+
+Both encodings matter. Slot 2 is the numeric `4476` inside trigger data and
+the string `<Player @ B>` on team and script houses. Rewriting only the
+numbers left reinforcement teams such as *Reznov Arrives* bound to a slot
+that no longer exists, so the hero never spawned and the map's
+"[Lose] Reznov Dies" trigger — an event 61 test for the `REZNOV` type
+existing — fired on the first frame. Slots `C`, `D` and `E` are the scripted
+enemies and are left alone.
 
 **Play them alone — do not add an AI ally.** Once slot 2 owns nothing the
 engine declares that house defeated on the first frame, and a defeated ally
