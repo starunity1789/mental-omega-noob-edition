@@ -700,14 +700,21 @@ def build(dry=False):
     #     failed the mission. With MinPlayers=1 the slot simply stays empty.
     #     The scripted enemies are unaffected: the client builds them from each
     #     entry's own EnemyHouse0/EnemyHouse1, not from the player slots.
+    # MinPlayers alone is not enough: the client auto-fills a co-op lobby up to
+    # MaxPlayers, so slot 2 kept coming back as an AI ally that owned nothing
+    # and was defeated on frame 1. Dropping MaxPlayers to 1 removes the slot.
+    # The scripted enemies are unaffected - they come from EnemyHouse0/1, which
+    # carry their own spawn positions (verified in a real spawn.ini: Multi3/
+    # Multi4 had locations, the auto-filled Multi2 never did).
     n_solo = 0
     for sec2 in maps.section_names():
         if (sec2.lower().startswith(r"mapsmo\cooperative" + "\\")
                 and maps.get(sec2, "MinPlayers") == "2"):
             maps.set_key(sec2, "MinPlayers", "1")
+            maps.set_key(sec2, "MaxPlayers", "1")
             n_solo += 1
     say(f"[maps] 删除联机限制：模式段 {n_mode} 行 + 地图条目 {n_map_sec} 处")
-    say(f"[maps] 合作地图允许单人开局：MinPlayers 2->1，{n_solo} 张")
+    say(f"[maps] 合作地图改为单人：MinPlayers/MaxPlayers 2->1，{n_solo} 张")
     assert n_solo == 36, f"expected 36 entries, changed {n_solo}"
     assert n_mode == 6, f"expected 6 mode lines, removed {n_mode}"
     assert n_map_sec == 36, f"expected 36 map entries, cleared {n_map_sec}"

@@ -59,8 +59,10 @@ reinforcements and its objective triggers all belong to you. 36 maps,
 
 **Play them alone — do not add an AI ally.** Once slot 2 owns nothing the
 engine declares that house defeated on the first frame, and a defeated ally
-fails the mission. So the patch also drops `MinPlayers` to 1, in the client's
-map entries and in each map's `[Basic]`, and the slot simply stays empty. The
+fails the mission. `MinPlayers` alone is not enough -- the client fills a co-op lobby up to
+`MaxPlayers` and refuses to start with an empty slot -- so the patch sets both
+`MinPlayers` and `MaxPlayers` to 1 in the client's map entries, plus
+`MinPlayer` in each map's `[Basic]`. The ally slot stops existing. The
 scripted enemies are unaffected: the client builds them from each entry's own
 `EnemyHouse0` / `EnemyHouse1`, which have nothing to do with the player slots.
 
