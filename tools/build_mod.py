@@ -237,6 +237,14 @@ HERO_SKIP = {"AIMORA"}
 # ---------------------------------------------------------------------------
 COOP_P2 = "4476"
 COOP_P1 = "4475"
+# Slot 2 is encoded two different ways and BOTH have to be rewritten:
+#   * trigger events and actions use the numeric codes 4475 / 4476
+#   * TeamType / ScriptType House= fields use the strings below
+# Missing the string form left reinforcement teams such as "Reznov Arrives"
+# assigned to a slot that no longer exists, so the hero never spawned and the
+# map's "hero is gone" lose trigger fired immediately.
+COOP_P2_HOUSE = "<Player @ B>"
+COOP_P1_HOUSE = "<Player @ A>"
 
 # Hand tuning carried over from the user's v1 rulesmo.ini (which the first
 # rebuild-from-pristine had silently dropped), plus the requested +50% reach.
@@ -745,13 +753,20 @@ def build(dry=False):
         f"{len(os.listdir(coop_src))} 张，[Basic] MinPlayer 2->1：{n_min} 张")
 
     # hand slot 2's half of every co-op mission to slot 1
-    n_ev = n_ac = n_maps2 = 0
+    n_ev = n_ac = n_house = n_maps2 = 0
     for fn in sorted(os.listdir(coop_out)):
         if not fn.lower().endswith(".map"):
             continue
         path = os.path.join(coop_out, fn)
         mp = Ini(path, encoding="latin-1")
         touched = False
+        # House=<Player @ B> on TeamTypes / ScriptTypes. Slots C, D and E are
+        # the scripted enemies and must be left alone.
+        for i, line in enumerate(mp.lines):
+            if COOP_P2_HOUSE in line and line.split("=", 1)[0].strip() == "House":
+                mp.lines[i] = line.replace(COOP_P2_HOUSE, COOP_P1_HOUSE)
+                n_house += 1
+                touched = True
         for sect, per_slot in (("Events", 3), ("Actions", 8)):
             for start, end in mp.sections.get(sect, []):
                 for i in range(start + 1, end):
@@ -782,7 +797,7 @@ def build(dry=False):
             mp.save(path)
             n_maps2 += 1
     say(f"[maps] 合作任务 2 号位并入 1 号位：{n_maps2} 张图，"
-        f"事件 {n_ev} 条 + 动作 {n_ac} 条")
+        f"事件 {n_ev} 条 + 动作 {n_ac} 条 + 小队归属 {n_house} 条")
 
     # ======================================================================
     # write everything out

@@ -454,10 +454,30 @@ def main():
                 for i in range(start + 1, end):
                     if _re.search(r"(^|,)4476(,|$)", mp.lines[i].split("=", 1)[-1]):
                         left.append(f"{fn}:{sect}")
+    # slot 2 is also encoded as a House= string on TeamTypes/ScriptTypes;
+    # missing it left reinforcement teams (e.g. "Reznov Arrives") orphaned
+    enemy_before = {"C": 1099, "D": 763, "E": 73}
+    enemy_now = {k: 0 for k in enemy_before}
+    for fn in sorted(os.listdir(coop_dir)):
+        if not fn.lower().endswith(".map"):
+            continue
+        for ln in open(os.path.join(coop_dir, fn), encoding="latin-1"):
+            t = ln.strip()
+            if not t.startswith("House="):
+                continue
+            if "<Player @ B>" in t:
+                left.append(f"{fn}:House")
+            for k in enemy_now:
+                if f"<Player @ {k}>" in t:
+                    enemy_now[k] += 1
+    if enemy_now != enemy_before:
+        fail(f"敌方位置的小队归属被误改: {enemy_now} 应为 {enemy_before}")
+    else:
+        print(f"  ok   敌方位置 C/D/E 的小队归属未被触碰 {enemy_now}")
     if left:
         fail(f"合作地图仍残留 2 号位引用: {sorted(set(left))[:5]}")
     else:
-        print(f"  ok   {checked} 张合作地图的事件/动作里已无 2 号位(4476)引用")
+        print(f"  ok   {checked} 张合作地图已无 2 号位引用（数字 4476 与 House=<Player @ B> 两套编码）")
 
     # the ally slot must be optional: with slot 2's half handed to slot 1, an
     # ally house would own nothing and the engine defeats it on frame 1.
