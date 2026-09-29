@@ -14,14 +14,18 @@ untouched**.
 
 ---
 
-## ⚠️ Offline use only — do not take this online
+## ⚠️ This build cannot be used online
 
-**This build is not for multiplayer.** Do not host it, do not join CnCNet or
-LAN games with it, do not play it against other people.
+**This is a single-player patch and cannot be used for multiplayer.** Do not
+host it, do not join CnCNet or LAN games with it, do not play it against other
+people.
 
 It changes `rulesmo.ini`, which means your game no longer matches anyone
-else's. Using it online will desync the match, ruin the game for everyone in
-it, and is simply cheating.
+else's: against a player without the identical patch the match desyncs and
+drops, ruining the game for everyone in it. And even if you did get a game
+going, using it in online PvP is **flat-out cheating** — always-on support
+powers, every faction's tech tree, one building that counts as every tech
+building on the map.
 
 It exists for two kinds of players:
 
@@ -140,7 +144,7 @@ Every registered type is classified by that formula:
 | Effective owners already cover a whole faction | 188 | open to all 12 countries | **none** |
 | Sub-faction exclusive | 94 | **cloned** into new `SU*` entries; the originals are not touched | **none** |
 | Stolen-tech units behind the beacon | 10 (+2 partners) | cloned; gated on the beacon | **none** |
-| Hero infantry | 24 | cloned; gated on the beacon | **none** |
+| Hero infantry | 21 + Boris | cloned; gated on the beacon | **none** |
 | Allied Battle Lab | 1 | cloned; gated on the Allied tech yard | **none** |
 | Props, spawned objects, projectiles | rest | untouched | — |
 
@@ -152,9 +156,27 @@ stays Euro Alliance's.
 
 A new building any tech Construction Yard can put up. It is a rebuild of Mental
 Omega's *Blackout Research Station* prop — the donor art has no `Buildup=`, so
-it appears without a construction animation. Cosmetic only.
+it appears without a construction animation. Cosmetic only. The prop has no
+sidebar icon; the beacon gets one of its own.
 
-It does two things.
+It does three things.
+
+**Doubles as seven tech buildings** — owning it is as good as holding all of:
+
+| Tech building | Effect |
+|---|---|
+| Tech Infantry Academy | new infantry come out veteran |
+| Tech Heavy Machinery Plant | new land vehicles come out veteran |
+| Tech Military Docks | new ships come out veteran |
+| Tech Aeronautics Academy | new aircraft come out veteran |
+| Tech Defense Bureau | new defenses come out veteran |
+| Tech Machine Shop | all vehicles slowly self-repair |
+| Tech Hospital | all infantry slowly self-heal |
+
+The effects are plain building tags (`Academy.*Veterancy`,
+`UnitsGainSelfHeal`, `InfantryGainSelfHeal`). The patcher **reads them out of
+the seven stock buildings** at build time and merges them onto the beacon —
+nothing copied by hand, and the stock buildings stay untouched.
 
 **Carries the Far Star Knights Aid support power** — built from MO's own
 `PaladinAidSpecial`, so it behaves like a stock power:
@@ -192,16 +214,28 @@ for a generic tech building accepts it.
 
 ### 7. Hero infantry
 
-All **24** hero infantry — Tanya, Siegfried, Volkov, Morales, Yunru, Rahn,
-Libra, Eureka, Yuri, Reznov, Krukov, Rhad and the rest — become buildable at
-**any faction's barracks** once the Far Star Support Beacon stands.
+**22** hero infantry — Tanya, Siegfried, Volkov, Morales, Yunru, Rahn,
+Libra, Eureka, Yuri, Reznov, Krukov, Rhad, Boris and the rest — become
+buildable at **any faction's barracks** once the Far Star Support Beacon
+stands.
 
 They are identified from Mental Omega's own `[ArmorTypes]` *Heroes Infantry
 Group* block rather than by name, so the list cannot drift if MO renames
-anything. `AIMORA`, the AI-only duplicate of Morales, is skipped.
+anything. Skipped: `AIMORA`, the AI-only duplicate of Morales, and the three
+easter-egg action-movie commandos (`ARND` / `STLN` / `CLNT`).
 
-As everywhere else, these are `SU*` clones; the stock heroes keep their own
-prerequisites untouched.
+- **Boris** is not in Mental Omega's rules at all — MO defines him per map
+  (the Soviet 1 map only sets his TechLevel). The patcher reads MO's own full
+  definition out of the *Revolution* challenge map (`c_revolution.map`) in
+  your installation; art, cameo, AK weapons and voices are all stock. One
+  change: that map arms him with the AI's airstrike flare, which is swapped
+  for the player version (the one with attack cursors).
+- **Build time**: MO gives its campaign-only heroes — Reznov, Krukov, Rhad,
+  the Space Commando, Yuri X — a 121x build time, a de facto lock. The clones
+  get the ordinary heroes' 2x.
+- Every hero clone self-heals.
+
+As everywhere else, these are `SU*` clones; the stock heroes are untouched.
 
 ---
 
@@ -212,7 +246,7 @@ You need your own legal copy of **Mental Omega 3.3.6**. This repository ships
 installation's `expandmo99.mix` and writes the patched result back.
 
 Requires Python 3.8+ (`pip install pillow` only if you want to regenerate the
-cameo icons; the six PCX files are already included).
+cameo icons; the eight PCX files are already included).
 
 ```bash
 git clone https://github.com/starunity1789-bot/mental-omega-noob-edition.git
@@ -253,8 +287,12 @@ Tool output is in Chinese, since that is who this is for.
 - **Beacon gate** — the ten stolen-tech clones are unbuildable without the
   beacon standing and all ten are buildable with it, and the ten stock entries
   are compared key by key against pristine to prove they never moved.
-- **Hero gate** — same proof for the 24 hero clones, plus a key-by-key check
-  that no stock hero's stats, weapons or art changed.
+- **Hero gate** — same proof for the 22 hero clones, plus a key-by-key check
+  that no stock hero's stats, weapons or art changed; the easter-egg units
+  are not cloned; every clone self-heals and builds in at most 2x time; Boris
+  matches the map's definition key by key.
+- **Beacon as tech buildings** — the beacon's six effect tags match the seven
+  stock tech buildings exactly, and those buildings are untouched.
 - **Battle Lab gate** — `SUGATECH` needs the Allied tech yard and nothing else.
 - **Co-op ownership** — no reference to slot 2 survives in any co-op map's
   events or actions, and every map plus every client entry accepts one player.
@@ -284,8 +322,9 @@ ships 1156 `BuildingTypes`, over the 512 Ares warns about.)
 (AlexB) and the CnCNet team. All Mental Omega assets, rules, maps, artwork,
 text and balance design belong to them.
 
-This repository claims none of it. It contains only patch scripts, six cameo
-icons drawn for the new support powers, and documentation. Every byte of game
+This repository claims none of it. It contains only patch scripts, eight
+cameo icons drawn for the new support powers and the beacon, and
+documentation. Every byte of game
 content is read from, and written back to, your own installation.
 
 Mental Omega's own readme asks that it not be re-uploaded without permission,

@@ -23,11 +23,12 @@ from motree import Tree, SIDES, ALL12, TYPE_LISTS, split_list  # noqa: E402
 
 # Set by configure(); validation runs against work/output, which build_mod.py
 # fills with a byte-identical copy of what it wrote into the game folder.
-PRISTINE = OUT = CAMEOS = None
+PRISTINE = OUT = CAMEOS = GAME = None
 
 
 def configure(args):
-    global PRISTINE, OUT, CAMEOS
+    global PRISTINE, OUT, CAMEOS, GAME
+    GAME = os.path.abspath(args.game) if args.game else None
     work = os.path.abspath(args.work or os.path.join(REPO, "work"))
     PRISTINE = os.path.join(work, "pristine")
     OUT = os.path.join(work, "output")
@@ -385,15 +386,46 @@ def main():
     HERO_ARMORS = {"tany", "krukov", "moral", "f_hero", "yunru", "under",
                    "libra", "librc", "rahn", "sib_fin", "sib_ali", "eureka",
                    "sieg", "c_hero", "c_hero2"}
+    import build_mod as bm
+    EGGS = {"ARND", "STLN", "CLNT"}          # easter-egg commandos, left out
     stock_heroes = [x for x in t_old.registered["InfantryTypes"]
                     if (t_old.ini.get(x, "Armor") or "").strip() in HERO_ARMORS
-                    and x != "AIMORA"]
+                    and x != "AIMORA" and x not in EGGS]
     hero_clones = [NEW_PREFIX + x for x in stock_heroes]
+    bid = NEW_PREFIX + bm.BORIS
+    if bid in secs:                          # rebuilt from the challenge map
+        hero_clones.append(bid)
     absent = [h for h in hero_clones if h not in secs]
     if absent:
         fail(f"英雄克隆缺失: {absent[:6]}")
     else:
         print(f"  ok   {len(hero_clones)} 个英雄步兵克隆全部存在")
+    eggs = [NEW_PREFIX + x for x in EGGS if NEW_PREFIX + x in secs]
+    if eggs:
+        fail(f"彩蛋单位仍被克隆: {eggs}")
+    else:
+        print(f"  ok   彩蛋单位 {sorted(EGGS)} 未克隆（原版不受影响）")
+    no_heal = [h for h in hero_clones if m.get(h, "SelfHealing") != "yes"]
+    slow = [f"{h}={m.get(h, 'BuildTimeMultiplier')}" for h in hero_clones
+            if float(m.get(h, "BuildTimeMultiplier") or 1) > 2]
+    if no_heal or slow:
+        fail(f"英雄克隆 无自愈 {no_heal[:4]} / 造兵时间倍率 >2 {slow[:4]}")
+    else:
+        print("  ok   英雄克隆全部 SelfHealing=yes，造兵时间倍率均不超过 2")
+    if bid in secs and GAME:
+        # every key comes from MO's own map definition except those set on
+        # purpose; his art, cameo and weapons must exist in the stock data
+        src_b = dict(Ini(os.path.join(GAME, bm.BORIS_MAP)).items(bm.BORIS))
+        on_purpose = set(bm.BORIS_KEYS) | {"Owner", "Prerequisite", "TechLevel",
+                                           "AIBuildThis", "SelfHealing", "Image"}
+        drift = {k for k in src_b if k not in on_purpose and src_b[k] != m.get(bid, k)}
+        img = m.get(bid, "Image")
+        lost = [x for x in (m.get(bid, "Primary"), m.get(bid, "ElitePrimary"),
+                            m.get(bid, "Secondary")) if not m.r.has_section(x)]
+        if drift or lost or not art.get(img, "CameoPCX"):
+            fail(f"鲍里斯不对: 偏离地图定义 {drift} / 武器缺失 {lost} / 美术 {img}")
+        else:
+            print(f"  ok   {bid}：按挑战地图的 MO 官方定义复原，美术/图标/武器沿用原版")
     base = {"NACNST", "NAHAND", "NAPOWR", "NAREFN", "SUGACNST", "GAPILE"}
     leaked = [h for h in hero_clones if t_new.buildable_by(h, "Chinese", base)]
     got = [h for h in hero_clones
@@ -496,6 +528,29 @@ def main():
         fail(f"{len(bad_cl)} 个客户端条目的 MinPlayers 仍不是 1")
     else:
         print("  ok   36 个客户端条目 MinPlayers=1（大厅允许一个人开始）")
+
+    # the beacon doubles as the seven tech buildings, and has its own cameo
+    need = {}
+    for donor in bm.TECH_DONORS:
+        for k in bm.TECH_EFFECT:
+            v = t_old.ini.get(donor, k)
+            if v:
+                need[k] = max(need.get(k, 0.0), float(v))
+    have = {k: float(m.get("SUBEACON", k) or 0) for k in bm.TECH_EFFECT}
+    moved = [d for d in bm.TECH_DONORS
+             if dict(t_old.ini.items(d)) != dict(m.items(d))]
+    if have != need or moved:
+        fail(f"信标的科技建筑效果不对: 应为 {need} 实为 {have} / 原版被改 {moved}")
+    else:
+        print(f"  ok   信标兼任 7 个科技建筑：{len(need)} 个效果键与原版逐项一致，"
+              "原版科技建筑未改动")
+    bimg = m.get("SUBEACON", "Image")
+    pcx = art.get(bimg, "CameoPCX")
+    if not pcx or not os.path.isfile(os.path.join(CAMEOS, pcx)) \
+            or art.get(bimg, "Image") != "GABSTA":
+        fail(f"信标图标/模型设置不对: Image={bimg} CameoPCX={pcx}")
+    else:
+        print(f"  ok   信标：自有美术段 [{bimg}]（模型沿用 GABSTA）+ 图标 {pcx}")
 
     print()
     print("=" * 64)

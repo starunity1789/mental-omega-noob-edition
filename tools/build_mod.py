@@ -18,7 +18,7 @@ What it produces
   artmo.ini              pristine + art sections for the new types
   ra2md.csf              stock strings + names for the new content
   INI/MentalOmegaMaps.ini  co-op modes unlocked for skirmish
-  *.pcx                  six support-power cameos
+  *.pcx                  eight cameos (support powers + the beacon)
   (backup only) starunity_block.ini — readable copy of the appended block
 
 Why one file instead of an [#include]: [GenericPrerequisites] is evaluated
@@ -196,6 +196,23 @@ BEACON_SW_DELIVERS = "SREF,SREF,ABRM,ABRM,BLZZ,BLZZ,PANTHER,PANTHER,SDRN"
 BEACON_SW_COST = "-8500"
 BEACON_SW_RECHARGE = "0.25"             # 15 seconds
 
+# Tech buildings whose capture effects the beacon also grants, so owning it
+# is as good as holding all of them. Their effects are plain building tags:
+#   Academy.<Kind>Veterancy   (Ares) new units of that kind come out veteran
+#   InfantryGainSelfHeal / UnitsGainSelfHeal   infantry / vehicles self-repair
+# The tags are read from the stock buildings at build time, not copied by
+# hand. Academy.Types / Academy.Ignore are dropped: they only split vehicles
+# between the Heavy Machinery Plant (land) and the Military Docks (naval),
+# and together the two cover every vehicle.
+TECH_DONORS = {
+    "CAACAD": "科技步兵学院", "CAHMCH": "科技重机械厂", "CAAERO": "科技航空学院",
+    "CADEFB": "科技防卫局", "CADOCK": "科技军事码头", "CAMACH": "科技机械维修车间",
+    "CATHOSP": "科技医院",
+}
+TECH_EFFECT = ("Academy.InfantryVeterancy", "Academy.VehicleVeterancy",
+               "Academy.AircraftVeterancy", "Academy.BuildingVeterancy",
+               "InfantryGainSelfHeal", "UnitsGainSelfHeal")
+
 # Stolen-tech units the beacon unlocks. Cloned rather than unlocked in place:
 # the real gate lives in INI/Game Options/Stolen Tech.ini, which overrides
 # rulesmo.ini at launch, and editing it would change ordinary skirmish play.
@@ -225,7 +242,22 @@ HERO_ARMORS = {"tany", "krukov", "moral", "f_hero", "yunru", "under", "libra",
                "librc", "rahn", "sib_fin", "sib_ali", "eureka", "sieg",
                "c_hero", "c_hero2"}
 # AIMORA is the AI-only duplicate of MORALES (its prerequisite carries AILOCK).
-HERO_SKIP = {"AIMORA"}
+# ARND / STLN / CLNT are the easter-egg action-movie commandos; left out.
+HERO_SKIP = {"AIMORA", "ARND", "STLN", "CLNT"}
+# MO blocks its campaign-only heroes (Reznov, Krukov, ...) with a 121x build
+# time; the ordinary heroes use 2x. The clones get the ordinary value.
+HERO_BUILD_TIME = "2"
+
+# Boris (鲍里斯). rulesmo.ini has no [BORIS]: MO defines him per map. The full
+# MO-authored definition is in the "Revolution" challenge map (the Soviet 1
+# campaign map only sets TechLevel); it is read from your own installation.
+# His art, cameo, AKM/AKME weapons and voices are all in the stock files.
+BORIS = "BORIS"
+BORIS_MAP = os.path.join("MapsMO", "Challenge", "c_revolution.map")
+# FlareAI is the computer's flavour: no player attack cursors. Morales' Flare
+# is the same airstrike marker with them.
+BORIS_KEYS = {"Secondary": "Flare", "EliteSecondary": "Flare",
+              "BuildLimit": "1", "BuildTimeMultiplier": HERO_BUILD_TIME}
 
 # ---------------------------------------------------------------------------
 # Co-op: hand the ally's half of the mission to player 1
@@ -536,7 +568,6 @@ def build(dry=False):
     d.update({
         "UIName": f"NAME:{BEACON}",
         "Name": "Far Star Support Beacon",
-        "Image": BEACON_DONOR,          # 3x3 foundation + ActiveAnim come along
         "Owner": ALL12_STR,
         "Prerequisite": BEACON_YARD_GENERIC,
         "TechLevel": "1",
@@ -553,7 +584,22 @@ def build(dry=False):
         "Capturable": "false",
         "AIBuildThis": "no",
         "SuperWeapons": BEACON_SW,
+        "Image": BEACON,                # own art entry below: donor art + cameo
     })
+    # A copy of the donor's art plus a cameo. Art-level Image= keeps the
+    # donor's shape (NewTheater substitution included), as MO does for its
+    # own buildings (e.g. [GACNST] Image=GGCNST).
+    art.append_section(BEACON, list(art.items(BEACON_DONOR).items()) +
+                       [("Image", BEACON_DONOR), ("CameoPCX", "sucbcon.pcx"),
+                        ("AltCameoPCX", "sucbcon.pcx")])
+    tech = {}
+    for donor in TECH_DONORS:
+        for k, v in rules.items(donor).items():
+            if k in TECH_EFFECT:
+                tech[k] = str(max(float(v), float(tech.get(k, 0)))).rstrip("0").rstrip(".")
+    assert set(tech) == set(TECH_EFFECT), sorted(set(TECH_EFFECT) - set(tech))
+    d.update(tech)
+    say(f"[rules] 信标兼任 {len(TECH_DONORS)} 个科技建筑：{tech}")
     sec(BEACON, list(d.items()),
         "Far Star Support Beacon - buildable from any SU tech Construction "
         "Yard; carries the Knights support power and unlocks the ten units "
@@ -630,8 +676,18 @@ def build(dry=False):
                   ",".join(tech + [lab_clone[b] for b in LAB_CLONES]))
 
     # --- hero infantry ------------------------------------------------------
-    for u in hero_ids:
-        d = dict(rules.items(u))
+    hero_src = {u: dict(rules.items(u)) for u in hero_ids}
+    boris_path = os.path.join(GAME, BORIS_MAP)
+    if rules.has_section(BORIS):
+        say(f"[rules] 注意：rulesmo.ini 已自带 [{BORIS}]，跳过从挑战地图复原")
+    elif os.path.isfile(boris_path) and Ini(boris_path).get(BORIS, "Primary"):
+        hero_src[BORIS] = dict(Ini(boris_path).items(BORIS), **BORIS_KEYS)
+        hero_clone[BORIS] = P + BORIS
+        rules.append_to_list("InfantryTypes", [P + BORIS])
+    else:
+        say(f"[rules] 注意：找不到 {BORIS_MAP} 里的 [{BORIS}]，这次不加鲍里斯")
+    for u in hero_src:
+        d = hero_src[u]
         d["Owner"] = ALL12_STR
         d.pop("RequiredHouses", None)
         d.pop("ForbiddenHouses", None)
@@ -646,9 +702,13 @@ def build(dry=False):
         d["Prerequisite"] = f"BARRACKS,{BEACON}"
         d["TechLevel"] = "10"
         d["AIBuildThis"] = "no"
+        d["SelfHealing"] = "yes"
+        if "BuildTimeMultiplier" in d:
+            d["BuildTimeMultiplier"] = HERO_BUILD_TIME
         sec(hero_clone[u], list(d.items()),
             f"{u} copy - any barracks + {BEACON}")
-    say(f"[rules] 英雄步兵解锁：{len(hero_ids)} 个（任意兵营 + {BEACON}）")
+    say(f"[rules] 英雄步兵解锁：{len(hero_src)} 个（任意兵营 + {BEACON}"
+        f"{'，含从挑战地图复原的鲍里斯' if BORIS in hero_src else ''}）")
 
     # --- superweapons ------------------------------------------------------
     for sw, deliver, cam, en_name, cn in SUPERWEAPONS:
@@ -664,9 +724,10 @@ def build(dry=False):
     # ======================================================================
     # 3. artmo.ini — art for the new MCVs and Construction Yards
     # ======================================================================
-    # No art sections are needed: every new type carries a rules Image= that
-    # redirects to the stock entry, so model, cameo and foundation all follow.
-    say("[art] 无需新增美术段（新类型用 rules Image= 指向原版美术条目）")
+    # Clones carry a rules Image= that redirects to the stock entry, so model,
+    # cameo and foundation all follow. Only the beacon (its donor prop has no
+    # cameo) gets an art section of its own, added above.
+    say("[art] 克隆体沿用原版美术条目；新增美术段：信标 1 个（带图标）")
 
     # ======================================================================
     # 4. ra2md.csf
