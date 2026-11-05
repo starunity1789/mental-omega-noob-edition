@@ -1,25 +1,34 @@
 """Noob Edition patch generator for Mental Omega 3.3.6.
 
-Ships no Mental Omega content. It reads the pristine rules straight out of
-your own installation's expandmo99.mix, applies the Noob Edition changes and
-writes the result back into the game folder.
+Ships no Mental Omega content. It reads the pristine data straight out of your
+own installation, applies the Noob Edition changes and writes the result back
+into the game folder. Every file it replaces is snapshotted first.
 
-  python tools/build_mod.py --game "D:/Games/Mental Omega"
-  python tools/build_mod.py --game "..." --dry       build to work/output only
-  python tools/build_mod.py --game "..." --restore   undo everything
-  python tools/validate.py   --game "..."            prove nothing else moved
+  python tools/build_mod.py --game "D:/Games/Mental Omega"   first run
+  python tools/build_mod.py                   later runs (paths are remembered)
+  python tools/build_mod.py --dry             build into <work>/output only
+  python tools/build_mod.py --restore         put the game back exactly as it was
+  python tools/validate.py                    prove nothing else moved
 
-The first run snapshots every file it is about to touch into work/backup, so
---restore puts the installation back exactly as it was.
+Optional parts, snapshotted once into <work> and rebuilt on every later run:
+  --qier "<企鹅的心灵终结 v1.1 folder>"   Phobos UI features + 12 skirmish maps
+  --abc  "<东方秽浪港 install>/Game"      Touhou infantry + ABC Prism Tank
+Without them those parts are simply left out. See paths.py for the layout.
 
 What it produces
   rulesmo.ini            pristine + surgical edits, then the whole new-content
                          block appended between STARUNITY EX BEGIN/END markers
   artmo.ini              pristine + art sections for the new types
   ra2md.csf              stock strings + names for the new content
-  INI/MentalOmegaMaps.ini  co-op modes unlocked for skirmish
-  *.pcx                  eight cameos (support powers + the beacon)
-  (backup only) starunity_block.ini — readable copy of the appended block
+  INI/MentalOmegaMaps.ini  co-op modes unlocked for skirmish (+ the QiEr maps)
+  MapsMO/Cooperative/*   co-op missions playable solo
+  sfatal.map             Fatal Impact: 4-hour timer, Volkov rides transports
+  soundmo.ini            (+ the ABC units' sounds)
+  MOAutoRepair.dll       player buildings repair themselves
+  *.pcx, suyurix*        cameos (support powers, beacon, Yuri)
+  optional               Phobos + SyringeEx + uimd.ini + client launch line,
+                         MapsMO/qier_maps/* + SP_LIBRA.ini, expandmo93.mix + abc*.pcx
+  (work only) starunity_block.ini — readable copy of the appended block
 
 Why one file instead of an [#include]: [GenericPrerequisites] is evaluated
 before an included file's "+=" registrations exist, so every ANY*=...,SU*
@@ -27,120 +36,23 @@ entry failed to parse. Verified in game: 64 warnings with the include, 0 with
 everything inside rulesmo.ini.
 """
 import argparse
+import json
 import os
 import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+
+import paths                                             # noqa: E402
 
 from moini import Ini                                    # noqa: E402
 from motree import Tree, SIDES, ALL12_STR, split_list    # noqa: E402
 from csftool import Csf                                  # noqa: E402
 from mixtool import extract                              # noqa: E402
-
-# Set by configure(); every path is derived from --game / --work.
-GAME = PRISTINE = BACKUP = OUTPUT = CAMEOS = None
-
-# Files the patch overwrites, relative to the game folder. Snapshotted on the
-# first run so --restore is exact.
-TOUCHED = ["ra2md.csf", os.path.join("INI", "MentalOmegaMaps.ini")]
-MARKER = "STARUNITY EX BEGIN"        # sentinel written into rulesmo.ini
-
-
-def configure(args):
-    global GAME, PRISTINE, BACKUP, OUTPUT, CAMEOS
-    GAME = os.path.abspath(args.game)
-    work = os.path.abspath(args.work or os.path.join(REPO, "work"))
-    PRISTINE = os.path.join(work, "pristine")
-    BACKUP = os.path.join(work, "backup")
-    OUTPUT = os.path.join(work, "output")
-    CAMEOS = os.path.join(REPO, "cameos")
-    for d in (PRISTINE, BACKUP, OUTPUT):
-        os.makedirs(d, exist_ok=True)
-    if not os.path.isfile(os.path.join(GAME, "expandmo99.mix")):
-        raise SystemExit("not a Mental Omega 3.3.6 folder (no expandmo99.mix): "
-                         + GAME)
-
-
-def already_patched():
-    p = os.path.join(GAME, "rulesmo.ini")
-    if not os.path.isfile(p):
-        return False
-    with open(p, "r", encoding="latin-1", errors="ignore") as fh:
-        return MARKER in fh.read()
-
-
-def prepare():
-    """Pull pristine data out of the mixes and snapshot what we will modify."""
-    need = [n for n in ("rulesmo.ini", "artmo.ini")
-            if not os.path.isfile(os.path.join(PRISTINE, n))]
-    if need:
-        mixes = [os.path.join(GAME, "expandmo%d.mix" % n)
-                 for n in (99, 98, 97, 96, 95, 94)]
-        done, missing = extract(mixes, need, PRISTINE)
-        for n, m, sz in done:
-            say("[prepare] extracted %s (%s bytes) from %s"
-                % (n, format(sz, ","), os.path.basename(m)))
-        if missing:
-            raise SystemExit("could not find %s inside the game's mix files"
-                             % missing)
-
-    snap = os.path.join(BACKUP, "original")
-    coop_bak = os.path.join(BACKUP, "Cooperative")
-    first_run = not os.path.isdir(snap)
-    if first_run and already_patched():
-        raise SystemExit(
-            "rulesmo.ini is already patched but work/backup is missing, so the "
-            "originals cannot be recovered. Delete the game's rulesmo.ini and "
-            "artmo.ini (the game falls back to the copies inside "
-            "expandmo99.mix), restore ra2md.csf, INI/MentalOmegaMaps.ini and "
-            "MapsMO/Cooperative from a clean install, then run again.")
-    os.makedirs(snap, exist_ok=True)
-    for rel in TOUCHED:
-        dst_f = os.path.join(snap, os.path.basename(rel))
-        if not os.path.isfile(dst_f):
-            shutil.copy2(os.path.join(GAME, rel), dst_f)
-    os.makedirs(coop_bak, exist_ok=True)
-    game_coop = os.path.join(GAME, "MapsMO", "Cooperative")
-    if os.path.isdir(game_coop) and not os.listdir(coop_bak):
-        for f in sorted(os.listdir(game_coop)):
-            if f.lower().endswith(".map"):
-                shutil.copy2(os.path.join(game_coop, f),
-                             os.path.join(coop_bak, f))
-    if first_run:
-        say("[prepare] snapshotted the originals -> " + snap)
-
-
-def restore():
-    """Put the installation back the way it was."""
-    snap = os.path.join(BACKUP, "original")
-    if not os.path.isdir(snap):
-        raise SystemExit("nothing to restore: work/backup/original is missing")
-    for rel in TOUCHED:
-        src_f = os.path.join(snap, os.path.basename(rel))
-        if os.path.isfile(src_f):
-            shutil.copy2(src_f, os.path.join(GAME, rel))
-            say("[restore] " + rel)
-    coop_bak = os.path.join(BACKUP, "Cooperative")
-    game_coop = os.path.join(GAME, "MapsMO", "Cooperative")
-    if os.path.isdir(coop_bak) and os.path.isdir(game_coop):
-        n = 0
-        for f in sorted(os.listdir(coop_bak)):
-            shutil.copy2(os.path.join(coop_bak, f), os.path.join(game_coop, f))
-            n += 1
-        say("[restore] %d co-op maps" % n)
-    for f in ("rulesmo.ini", "artmo.ini"):
-        p = os.path.join(GAME, f)
-        if os.path.isfile(p):
-            os.remove(p)
-            say("[restore] removed %s (the game falls back to expandmo99.mix)" % f)
-    for f in sorted(os.listdir(CAMEOS)):
-        p = os.path.join(GAME, f)
-        if os.path.isfile(p):
-            os.remove(p)
-    say("[restore] done - the installation is back to stock")
+import cameo                                             # noqa: E402
+import abc_port                                          # noqa: E402
+import qier_maps                                         # noqa: E402
 
 P = "SU"                       # ID prefix — verified collision-free in MO 3.3.6
 
@@ -213,6 +125,22 @@ TECH_EFFECT = ("Academy.InfantryVeterancy", "Academy.VehicleVeterancy",
                "Academy.AircraftVeterancy", "Academy.BuildingVeterancy",
                "InfantryGainSelfHeal", "UnitsGainSelfHeal")
 
+# The beacon is also a Grinder (部队回收厂, Yuri's YAGRND): units walk in and
+# turn into money at [General] RefundPercent. Only the behaviour tags come
+# over, read from the stock building; the grinding animation is YAGRND's own
+# art (SpecialAnim), which the beacon's art does not have - as wanted.
+GRINDER_DONOR = "YAGRND"
+GRINDER_KEYS = ("Grinding", "Cursor.Enter")
+# Why the beacon also needs a SpecialAnim. On every grind the engine
+# (gamemd 0x73A1E8 vehicles / 0x5198DC infantry) does DestroyNthAnim(3) - the
+# building's ActiveAnim - then PlayNthAnim(10), the SpecialAnim, and brings
+# the ActiveAnim back when that finishes. The donor prop's own SHP is empty:
+# its whole visible model IS the ActiveAnim, and with no SpecialAnim nothing
+# ever finished, so the beacon vanished after its first grind. The fix is a
+# SpecialAnim that is the model's own loop played once: the model keeps
+# animating through the grind, so there is still no visible grinding effect.
+BEACON_SPECIAL = "SUBEACON_S"
+
 # Stolen-tech units the beacon unlocks. Cloned rather than unlocked in place:
 # the real gate lives in INI/Game Options/Stolen Tech.ini, which overrides
 # rulesmo.ini at launch, and editing it would change ordinary skirmish play.
@@ -242,22 +170,51 @@ HERO_ARMORS = {"tany", "krukov", "moral", "f_hero", "yunru", "under", "libra",
                "librc", "rahn", "sib_fin", "sib_ali", "eureka", "sieg",
                "c_hero", "c_hero2"}
 # AIMORA is the AI-only duplicate of MORALES (its prerequisite carries AILOCK).
-# ARND / STLN / CLNT are the easter-egg action-movie commandos; left out.
-HERO_SKIP = {"AIMORA", "ARND", "STLN", "CLNT"}
+# ARND / STLN / CLNT are the easter-egg action-movie commandos; not wanted.
+# LIBRC is Libra's clone (天秤复制人); not wanted either.
+HERO_SKIP = {"AIMORA", "ARND", "STLN", "CLNT", "LIBRC"}
+
+# Heroes whose stock art has no cameo (campaign-only units). The clone gets
+# its own art entry with a drawn cameo. It cannot just point at the stock art
+# with an art-level Image=: no MO infantry does that, so it is unproven for
+# SHP infantry. Instead the sprite is copied under the clone's own name and
+# written loose into the game folder.
+#   hero: (sprite file, cameo base, alt cameo base, label, faction colour)
+HERO_CAMEOS = {
+    "YURIX": ("yurix.shp", "yuriicon.pcx", "yuriuico.pcx", "尤里", "epsilon"),
+}
 # MO blocks its campaign-only heroes (Reznov, Krukov, ...) with a 121x build
 # time; the ordinary heroes use 2x. The clones get the ordinary value.
 HERO_BUILD_TIME = "2"
 
 # Boris (鲍里斯). rulesmo.ini has no [BORIS]: MO defines him per map. The full
 # MO-authored definition is in the "Revolution" challenge map (the Soviet 1
-# campaign map only sets TechLevel); it is read from your own installation.
-# His art, cameo, AKM/AKME weapons and voices are all in the stock files.
+# campaign map only sets TechLevel), snapshotted into pristine/. His art,
+# cameo, AKM/AKME weapons and voices are all still in the stock files.
 BORIS = "BORIS"
-BORIS_MAP = os.path.join("MapsMO", "Challenge", "c_revolution.map")
+BORIS_MAP = "c_revolution.map"
 # FlareAI is the computer's flavour: no player attack cursors. Morales' Flare
 # is the same airstrike marker with them.
 BORIS_KEYS = {"Secondary": "Flare", "EliteSecondary": "Flare",
               "BuildLimit": "1", "BuildTimeMultiplier": HERO_BUILD_TIME}
+
+# Morales' sniper shot hurts friends three ways, all on the shot itself:
+#   AmbientDamage=300 on a railgun   everything the beam passes through
+#   KillDriverWH  CellSpread .3      splash at the impact point
+#   airburst KillDriverFixWH  .6     KILLS THE DRIVER of vehicles nearby
+# FRIENDLY_SAFE gives a clone its own copy of the whole chain: warheads
+# AffectsAllies=no, and the beam's pass-through damage dropped. It has to be
+# dropped: disassembly shows gamemd's TechnoClass::DealParticleDamage (0x70CBE8)
+# calls ReceiveDamage directly on every object along the beam - AffectsAllies
+# only exists in DamageArea - and Ares' hook at 0x70CBB0 only skips the loop
+# when AmbientDamage=0. No INI setting can spare friends from the pierce.
+# The user's call (2026-09-29): the pass-through damage cannot be made
+# friendly-safe (see above - the engine skips every allegiance check there),
+# and the splash / driver-kill do not matter in practice, so Morales keeps his
+# stock shot, friendly fire included, "as a character trait". The mechanism
+# stays: {"MORALES": ("Primary", "ElitePrimary")} turns it back on.
+FRIENDLY_SAFE = {}
+FRIENDLY_SAFE_KEEP_PIERCE = False
 
 # ---------------------------------------------------------------------------
 # Co-op: hand the ally's half of the mission to player 1
@@ -305,12 +262,265 @@ TUNING = {
     "ShinCannonsE": [("Range", "13")],
 }
 
+# Death's Hand (死神之手, DHANDL/DHANDR), the boss of the Soviet finale
+# "Soviet A2 Mission: Death's Hand" (expandmo97.mix). rulesmo.ini gives the
+# hands no weapons at all; that one map arms them with DeathBolt/DeathBoltAA,
+# which no unit in rulesmo.ini uses (validate.py re-checks), so tuning the
+# weapons here reaches that mission and nothing else.
+# User's call: damage 1, attack speed -90% (= ROF delay x10).
+DEATHS_HAND_WEAPONS = ("DeathBolt", "DeathBoltAA")
+DEATHS_HAND_DAMAGE = "1"
+DEATHS_HAND_ROF_MUL = 10
+
+# "Fatal Impact" (致命冲击, SFATAL.MAP, Soviet A2). The map lives in
+# expandmo97.mix; a patched copy is written loose into the game folder, which
+# the engine reads before the mixes. Snapshot: pristine/sfatal.map.
+#  - Mission timer: [Ob1]Timer Easy/Medium/Hard start it with action 27, whose
+#    parameter is SECONDS (gamemd 0x6DE5C9 multiplies it by 3*5 = 15 frames),
+#    and [LOST]Timer is over fails the mission. 9600 s = 2h40m -> 4 h.
+#    The [EsA] 600 s "recover" timers only top the clock back up when less
+#    than 600 s are left, and [EsA-O1] 2400 s is a separate later countdown;
+#    both left alone.
+#  - Volkov before his transformation: the map sets [VOLKOV] Size=50 so no
+#    transport takes him; back to rules' 1. Safe for the "Volkov does not
+#    exist" fail triggers (event 61): Ares counts types through the house's
+#    owned-type counters (HouseClass+0x5500..), which only RegisterGain /
+#    RegisterLoss (0x4FF700 / 0x4FF550) touch - on creation, destruction and
+#    owner change, never on entering a transport.
+FATAL_MAP = "sfatal.map"
+FATAL_TIMER_TRIGGERS = ("01000149", "01000151", "01000153")   # [Ob1]Timer E/M/H
+FATAL_TIMER_FROM, FATAL_TIMER_TO = "9600", str(4 * 3600)
+FATAL_VOLKOV_SIZE = ("50", "1")
+
+# Player buildings repair themselves (玩家建筑自动维修): our own Syringe plugin,
+# tools/autorepair/ (AutoRepair.c + build.py). Replaces MagicShiba's
+# MO_ExperienceEnhancements, which was removed for its bugs; see AutoRepair.c.
+AUTOREPAIR_DIR = os.path.join(HERE, "autorepair")
+AUTOREPAIR_DLL = os.path.join(AUTOREPAIR_DIR, "MOAutoRepair.dll")
+
+# Phobos (engine extension, GPL-3.0) for its UI features, taken from the
+# "企鹅的心灵终结 v1.1" (Mental Omega QiEr) pack, which already runs it with MO's
+# Ares 3.0: Phobos 0.5.0.0-alpha2, snapshotted into <work>/third_party/phobos/
+# by --qier (paths.PHOBOS_DIR). Left out entirely when that snapshot is absent.
+# - Needs SyringeEx (Phobos' own Syringe fork): with MO's Syringe 0.7.3.0 mo
+#   Phobos loads, then refuses to run ("unsupported Syringe version", tested
+#   in game 2026-11-05). So Syringe.exe becomes SyringeEx 0.7.2.0 - the one the
+#   QiEr pack ships and runs MO with. MO's own is kept in <work>/original/.
+# - SyringeEx's command line is "Syringe.exe <exe> --args=\"...\"" and it skips
+#   flags it does not know, so the client config changes the way the QiEr pack
+#   does it (Syringe.exe launched as the game, -SPAWN inside --args), plus the
+#   -SPEEDCONTROL and -AFFINITY that the QiEr pack dropped.
+# - Hooks: 1596; 93 share an address with Ares (Syringe chains those),
+#   none partially overlaps Ares or MOAutoRepair (validate.py re-checks).
+#   Phobos' MainLoop_FrameStep_Begin sits on the same 5 bytes as our
+#   AutoRepair_MainLoop (0x55D360) - same address and size, so chained.
+# - Its .patch section (245 byte patches, applied by Phobos itself) touches
+#   neither our hook bytes nor the engine functions MOAutoRepair calls.
+# The features are switched on in uimd.ini (pristine copy from expandmo99.mix
+# + exactly the QiEr pack's keys):
+# The superweapon sidebar also needs a rules switch: without
+# [AudioVisual] SuperWeaponSidebar.AllowByDefault no superweapon is let in
+# (seen in game: everything else on, sidebar empty). The QiEr pack also sets
+# SuperWeaponSidebar.Allow=yes / Significance=1 on all 108 of its
+# superweapons - identical for every one, so the default does the same job.
+RULES_UI_KEYS = [
+    ("AudioVisual", "SuperWeaponSidebar.AllowByDefault", "true"),
+    ("GlobalControls", "SuperWeaponSidebarKeysEnabled", "yes"),   # its hotkeys
+]
+PHOBOS_FILES = ("Phobos.dll", "Phobos.pdb")      # pdb: readable crash logs
+CLIENT_DEFS = os.path.join("Resources", "ClientDefinitions.ini")
+CLIENT_LAUNCH = [                                 # [Settings]; None = delete the key
+    ("GameExecutableNames", "Syringe.exe"),
+    ("GameLauncherExecutableName", None),
+    ("ExtraCommandLineParams",
+     'gamemd.exe --args="-SPAWN -CD -SPEEDCONTROL -LOG -AFFINITY:4194303"'),
+]
+UIMD_KEYS = [
+    ("Sidebar", [("SuperWeaponSidebar", "true"),          # 超武侧栏
+                 ("SuperWeaponSidebar.Max", "10"),
+                 ("SuperWeaponSidebar.MaxColumns", "3"),  # 3 列
+                 ("HarvesterCounter.Show", "true"),       # 矿车计数
+                 ("PowerDelta.Show", "true")]),           # 电量变化
+    ("Phobos", [("MessageApplyHoverState", "true"),       # 居中消息面板 + 历史记录
+                ("MessageDisplayInCenter", "true"),
+                ("MessageDisplayInCenter.BoardOpacity", "40"),
+                ("MessageDisplayInCenter.LabelsCount", "6"),
+                ("MessageDisplayInCenter.RecordsCount", "12"),
+                ("ShowPowerPlantEnhancerRange", "yes"),   # 电厂增幅范围
+                ("SuperWeaponSidebar.RequiredSignificance", "0"),
+                ("ToolTipDescriptions", "true")]),        # 悬停说明
+    ("ToolTips", [("ExtendedToolTips", "true"),           # 扩展悬停提示
+                  ("AnchoredToolTips", "true")]),
+]
+
+# --------------------------------------------------------------------------
+# the installation: pristine inputs, snapshots, deploy, restore
+# --------------------------------------------------------------------------
+MARKER = "STARUNITY EX BEGIN"        # sentinel written into rulesmo.ini
+# read out of the game's own mixes, newest first (the engine's priority)
+FROM_MIX = ["rulesmo.ini", "artmo.ini", "soundmo.ini", "uimd.ini",
+            FATAL_MAP, "yurix.shp", "yuriicon.pcx", "yuriuico.pcx"]
+MIXES = ["expandmo%02d.mix" % n for n in (99, 98, 97, 96, 95, 94)]
+# loose stock files read but never written
+FROM_LOOSE = {BORIS_MAP: os.path.join("MapsMO", "Challenge", BORIS_MAP)}
+# game files that are both read as input and replaced: snapshotted before
+# anything is written, and the build reads the snapshot
+INPUTS = ["ra2md.csf", os.path.join("INI", "MentalOmegaMaps.ini"), CLIENT_DEFS]
+COOP = os.path.join("MapsMO", "Cooperative")
+
 log = []
 
 
 def say(msg):
     log.append(msg)
     print(msg)
+
+
+def pristine(name):
+    return os.path.join(paths.PRISTINE, name)
+
+
+def original(rel):
+    """The game's own copy of a file the patch replaces (snapshotted)."""
+    return os.path.join(paths.ORIGINAL, rel)
+
+
+def already_patched():
+    p = os.path.join(paths.GAME, "rulesmo.ini")
+    if not os.path.isfile(p):
+        return False
+    with open(p, "r", encoding="latin-1", errors="ignore") as fh:
+        return MARKER in fh.read()
+
+
+def load_manifest():
+    if os.path.isfile(paths.MANIFEST):
+        with open(paths.MANIFEST, encoding="utf-8") as fh:
+            return json.load(fh)
+    return {"replaced": [], "added": []}
+
+
+def save_manifest(man):
+    with open(paths.MANIFEST, "w", encoding="utf-8") as fh:
+        json.dump({k: sorted(set(v)) for k, v in man.items()}, fh, indent=1)
+
+
+def migrate_old_layout():
+    """The first public release kept its snapshots in <work>/backup/. Move
+    them to <work>/original/ so --restore keeps working after an update."""
+    old = os.path.join(paths.WORK, "backup")
+    if not os.path.isdir(old) or os.path.isfile(paths.MANIFEST):
+        return
+    man = load_manifest()
+    moves = [(os.path.join(old, "original", "ra2md.csf"), "ra2md.csf"),
+             (os.path.join(old, "original", "MentalOmegaMaps.ini"),
+              os.path.join("INI", "MentalOmegaMaps.ini"))]
+    coop_old = os.path.join(old, "Cooperative")
+    if os.path.isdir(coop_old):
+        moves += [(os.path.join(coop_old, f), os.path.join(COOP, f))
+                  for f in sorted(os.listdir(coop_old))]
+    for src, rel in moves:
+        if os.path.isfile(src):
+            os.makedirs(os.path.dirname(original(rel)) or paths.ORIGINAL, exist_ok=True)
+            shutil.copy2(src, original(rel))
+            man["replaced"].append(rel)
+    # what that release wrote without a snapshot: loose files the game falls
+    # back from (rules/art) and its cameos
+    man["added"] += ["rulesmo.ini", "artmo.ini"] + sorted(os.listdir(paths.CAMEOS))
+    save_manifest(man)
+    say(f"[prepare] 旧版快照 {old} 已迁移到 {paths.ORIGINAL}")
+
+
+def prepare():
+    """Pull pristine data out of the game and snapshot every input file the
+    patch will later overwrite. Refuses to snapshot an already patched game."""
+    migrate_old_layout()
+    need = [n for n in FROM_MIX if not os.path.isfile(pristine(n))]
+    if need:
+        done, missing = extract([os.path.join(paths.GAME, m) for m in MIXES],
+                                need, paths.PRISTINE)
+        for n, m, sz in done:
+            say(f"[prepare] 从 {os.path.basename(m)} 取出 {n}（{sz:,} 字节）")
+        if missing:
+            raise SystemExit(f"could not find {missing} inside the game's mix files")
+    for name, rel in FROM_LOOSE.items():
+        if not os.path.isfile(pristine(name)):
+            src = os.path.join(paths.GAME, rel)
+            if not os.path.isfile(src):
+                raise SystemExit(f"missing {rel} in the game folder")
+            shutil.copy2(src, pristine(name))
+    game_coop = os.path.join(paths.GAME, COOP)
+    inputs = INPUTS + [os.path.join(COOP, f) for f in sorted(os.listdir(game_coop))
+                       if f.lower().endswith(".map")]
+    todo = [rel for rel in inputs if not os.path.isfile(original(rel))]
+    if todo and already_patched():
+        raise SystemExit(
+            "the game is already patched but these originals were never "
+            f"snapshotted, so they cannot be recovered: {todo[:3]}... Restore "
+            "them from a clean Mental Omega 3.3.6 install, then run again.")
+    for rel in todo:
+        os.makedirs(os.path.dirname(original(rel)), exist_ok=True)
+        shutil.copy2(os.path.join(paths.GAME, rel), original(rel))
+    if todo:
+        man = load_manifest()
+        man["replaced"] += todo
+        save_manifest(man)
+        say(f"[prepare] 快照了游戏原有文件 {len(todo)} 个 -> {paths.ORIGINAL}")
+
+
+def deploy(rels):
+    """Copy <work>/output/<rel> into the game. A file seen for the first time
+    is snapshotted if the game has one, or recorded as added. A file an
+    earlier build wrote but this one does not (an optional part dropped) is
+    put back the way it was."""
+    man = load_manifest()
+    known = set(man["replaced"]) | set(man["added"])
+    for rel in rels:
+        if rel in known:
+            continue
+        dst = os.path.join(paths.GAME, rel)
+        if os.path.isfile(dst):
+            os.makedirs(os.path.dirname(original(rel)) or paths.ORIGINAL, exist_ok=True)
+            shutil.copy2(dst, original(rel))
+            man["replaced"].append(rel)
+        else:
+            man["added"].append(rel)
+    save_manifest(man)                 # before touching the game
+    for rel in rels:
+        dst = os.path.join(paths.GAME, rel)
+        os.makedirs(os.path.dirname(dst) or paths.GAME, exist_ok=True)
+        shutil.copy2(os.path.join(paths.OUTPUT, rel), dst)
+    dropped = sorted(known - set(rels))
+    for rel in dropped:
+        revert(rel, man)
+    if dropped:
+        say(f"[deploy] 这次不再生成、已复原：{dropped[:6]}{' …' if len(dropped) > 6 else ''}")
+    stale = os.path.join(paths.GAME, "starunity.ini")
+    if os.path.exists(stale):
+        os.remove(stale)               # superseded: the block now lives in rules
+
+
+def revert(rel, man):
+    dst = os.path.join(paths.GAME, rel)
+    if rel in man["replaced"]:
+        shutil.copy2(original(rel), dst)
+    elif os.path.isfile(dst):
+        os.remove(dst)
+        d = os.path.dirname(dst)
+        while d != paths.GAME and os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+            d = os.path.dirname(d)
+
+
+def restore():
+    """Put the installation back exactly as it was before the first run."""
+    if not os.path.isfile(paths.MANIFEST):
+        raise SystemExit("nothing to restore: " + paths.MANIFEST + " is missing")
+    man = load_manifest()
+    for rel in sorted(set(man["replaced"]) | set(man["added"])):
+        revert(rel, man)
+    os.remove(paths.MANIFEST)          # the game is clean again
+    say(f"[restore] 复原 {len(man['replaced'])} 个文件，删除 {len(man['added'])} 个新增文件")
 
 
 # --------------------------------------------------------------------------
@@ -334,11 +544,46 @@ def rewrite_or_list(value, clones):
     return ",".join(out)
 
 
-def build(dry=False):
-    prepare()
+def friendly_safe_chain(rules, weapon, out):
+    """Copy a weapon and everything it fires (projectile, airburst/shrapnel
+    weapons, warheads) as P+name, with friendly damage removed. `out` collects
+    {new name: (kind, dict)}; returns the new weapon name."""
+    new = P + weapon
+    if new in out:
+        return new
+    assert not rules.has_section(new), f"clone name taken: {new}"
+    d = dict(rules.items(weapon))
+    out[new] = ("weapon", d)
+    if not FRIENDLY_SAFE_KEEP_PIERCE:
+        d.pop("AmbientDamage", None)
+    wh = d.get("Warhead")
+    if wh:
+        d["Warhead"] = P + wh
+        if P + wh not in out:
+            w = dict(rules.items(wh))
+            w["AffectsAllies"] = "no"     # Ares: AffectsOwner follows it
+            out[P + wh] = ("warhead", w)
+    pj = d.get("Projectile")
+    if pj:
+        p = dict(rules.items(pj))
+        for k in ("AirburstWeapon", "ShrapnelWeapon"):
+            if p.get(k):
+                p[k] = friendly_safe_chain(rules, p[k], out)
+        d["Projectile"] = P + pj
+        out.setdefault(P + pj, ("projectile", p))
+    return new
 
-    rules = Ini(os.path.join(PRISTINE, "rulesmo.ini"))
-    art = Ini(os.path.join(PRISTINE, "artmo.ini"))
+
+def build(dry=False):
+    OUTPUT = paths.OUTPUT
+    shutil.rmtree(OUTPUT, ignore_errors=True)   # output mirrors this build only
+    os.makedirs(OUTPUT)
+    use_abc, use_qier, use_phobos = paths.have_abc(), paths.have_qier_maps(), paths.have_phobos()
+    say("[optional] 东方/秽浪港移植 %s，企鹅包地图 %s，Phobos 界面 %s" % tuple(
+        "开" if x else "关（没有快照）" for x in (use_abc, use_qier, use_phobos)))
+
+    rules = Ini(pristine("rulesmo.ini"))
+    art = Ini(pristine("artmo.ini"))
 
     # Must happen before classification: with the cross-faction generic
     # BARRACKS the engineers have no unique ConYard root and would be skipped.
@@ -432,6 +677,20 @@ def build(dry=False):
     say(f"[rules] 手工调参：{len(TUNING)} 个段 / {n_tune} 个键"
         f"（混合塔不耗电+射程原版+50%+视野16+自愈+对空）")
 
+    # 1f. Death's Hand, Soviet finale only (see DEATHS_HAND_WEAPONS)
+    for w in DEATHS_HAND_WEAPONS:
+        old_rof = rules.get(w, "ROF")
+        rules.set_key(w, "Damage", DEATHS_HAND_DAMAGE)
+        rules.set_key(w, "ROF", str(int(old_rof) * DEATHS_HAND_ROF_MUL))
+    say(f"[rules] 死神之手（苏军最终关）：{'/'.join(DEATHS_HAND_WEAPONS)} 伤害 → "
+        f"{DEATHS_HAND_DAMAGE}，开火间隔 ×{DEATHS_HAND_ROF_MUL}")
+
+    # 1g. Phobos superweapon sidebar switches (see RULES_UI_KEYS)
+    for section, k, v in (RULES_UI_KEYS if use_phobos else []):
+        assert rules.has_section(section), section
+        rules.set_key(section, k, v)
+    say(f"[rules] Phobos 超武侧栏开关：{len(RULES_UI_KEYS)} 个")
+
     # ======================================================================
     # 2. the new content -- appended into rulesmo.ini itself
     # ======================================================================
@@ -449,9 +708,9 @@ def build(dry=False):
     su.append("; >>> STARUNITY EX BEGIN <<<")
     su.append("; Personal expansion for Mental Omega 3.3.6.")
     su.append("; Everything below is NEW content. Generated by")
-    su.append("; _MO_EX_MOD_BACKUP/tools/build_mod.py - do not hand edit.")
-    su.append("; To revert: restore pristine/rulesmo.ini, or delete this file")
-    su.append("; (the game then falls back to the copy inside expandmo99.mix).")
+    su.append("; tools/build_mod.py - do not hand edit.")
+    su.append("; To revert: python tools/build_mod.py --restore, or delete this")
+    su.append("; file (the game then falls back to the copy inside expandmo99.mix).")
     su.append("; ==========================================================")
     su.append("")
 
@@ -589,9 +848,17 @@ def build(dry=False):
     # A copy of the donor's art plus a cameo. Art-level Image= keeps the
     # donor's shape (NewTheater substitution included), as MO does for its
     # own buildings (e.g. [GACNST] Image=GGCNST).
+    donor_active = art.get(BEACON_DONOR, "ActiveAnim")
     art.append_section(BEACON, list(art.items(BEACON_DONOR).items()) +
                        [("Image", BEACON_DONOR), ("CameoPCX", "sucbcon.pcx"),
-                        ("AltCameoPCX", "sucbcon.pcx")])
+                        ("AltCameoPCX", "sucbcon.pcx"),
+                        ("SpecialAnim", BEACON_SPECIAL),
+                        ("SpecialAnimDamaged", BEACON_SPECIAL)])
+    # the model's own loop, played once (see BEACON_SPECIAL)
+    special = dict(art.items(donor_active))
+    special["LoopCount"] = "1"
+    art.append_section(BEACON_SPECIAL, list(special.items()))
+    rules.append_to_list("Animations", [BEACON_SPECIAL])
     tech = {}
     for donor in TECH_DONORS:
         for k, v in rules.items(donor).items():
@@ -600,6 +867,11 @@ def build(dry=False):
     assert set(tech) == set(TECH_EFFECT), sorted(set(TECH_EFFECT) - set(tech))
     d.update(tech)
     say(f"[rules] 信标兼任 {len(TECH_DONORS)} 个科技建筑：{tech}")
+    grind = {k: rules.get(GRINDER_DONOR, k) for k in GRINDER_KEYS}
+    assert all(grind.values()), grind
+    d.update(grind)
+    say(f"[rules] 信标兼任部队回收厂（{GRINDER_DONOR}）：{grind}，"
+        f"退款 {rules.get('General', 'RefundPercent')}，无回收动画")
     sec(BEACON, list(d.items()),
         "Far Star Support Beacon - buildable from any SU tech Construction "
         "Yard; carries the Knights support power and unlocks the ten units "
@@ -676,16 +948,15 @@ def build(dry=False):
                   ",".join(tech + [lab_clone[b] for b in LAB_CLONES]))
 
     # --- hero infantry ------------------------------------------------------
+    boris_map = Ini(pristine(BORIS_MAP))
+    assert boris_map.get(BORIS, "Primary"), f"{BORIS_MAP} has no full [{BORIS}]"
+    assert not rules.has_section(BORIS), "MO now defines BORIS itself - revisit"
     hero_src = {u: dict(rules.items(u)) for u in hero_ids}
-    boris_path = os.path.join(GAME, BORIS_MAP)
-    if rules.has_section(BORIS):
-        say(f"[rules] 注意：rulesmo.ini 已自带 [{BORIS}]，跳过从挑战地图复原")
-    elif os.path.isfile(boris_path) and Ini(boris_path).get(BORIS, "Primary"):
-        hero_src[BORIS] = dict(Ini(boris_path).items(BORIS), **BORIS_KEYS)
-        hero_clone[BORIS] = P + BORIS
-        rules.append_to_list("InfantryTypes", [P + BORIS])
-    else:
-        say(f"[rules] 注意：找不到 {BORIS_MAP} 里的 [{BORIS}]，这次不加鲍里斯")
+    hero_src[BORIS] = dict(boris_map.items(BORIS), **BORIS_KEYS)
+    hero_clone[BORIS] = P + BORIS
+    rules.append_to_list("InfantryTypes", [P + BORIS])
+    safe = {}
+    hero_files = {}                     # loose files for the game folder
     for u in hero_src:
         d = hero_src[u]
         d["Owner"] = ALL12_STR
@@ -694,6 +965,25 @@ def build(dry=False):
         if "FactoryOwners" in d:
             d["FactoryOwners"] = ALL12_STR
         d["Image"] = rules.get(u, "Image") or u
+        if u in HERO_CAMEOS:
+            shp, base, alt, label, fac = HERO_CAMEOS[u]
+            own = hero_clone[u]
+            assert not art.get(d["Image"], "CameoPCX"), f"{u} has a cameo now - revisit"
+            with open(pristine(shp), "rb") as fh:
+                hero_files[own.lower() + ".shp"] = fh.read()
+            pcx = {}
+            for tag, src in (("icon", base), ("uico", alt)):
+                name = f"{own.lower()}{tag}.pcx"
+                tmp = os.path.join(OUTPUT, name)
+                cameo.relabel_icon(pristine(src), label, fac, tmp)
+                with open(tmp, "rb") as fh:
+                    hero_files[name] = fh.read()
+                pcx[tag] = name
+            art.append_section(own, list(art.items(d["Image"]).items()) +
+                               [("CameoPCX", pcx["icon"]), ("AltCameoPCX", pcx["uico"])])
+            d["Image"] = own
+        elif not art.get(d["Image"], "CameoPCX"):
+            say(f"[rules] 注意：英雄 {u} 没有图标（加进 HERO_CAMEOS 可以画一个）")
         for k in ("Convert.Deploy", "Convert.Water", "Convert.Land",
                   "Convert.Script", "UndeploysInto", "DeploysInto",
                   "UpgradesTo", "Spawns", "PowersUpBuilding"):
@@ -705,10 +995,16 @@ def build(dry=False):
         d["SelfHealing"] = "yes"
         if "BuildTimeMultiplier" in d:
             d["BuildTimeMultiplier"] = HERO_BUILD_TIME
+        for k in FRIENDLY_SAFE.get(u, ()):
+            d[k] = friendly_safe_chain(rules, d[k], safe)
         sec(hero_clone[u], list(d.items()),
             f"{u} copy - any barracks + {BEACON}")
-    say(f"[rules] 英雄步兵解锁：{len(hero_src)} 个（任意兵营 + {BEACON}"
-        f"{'，含从挑战地图复原的鲍里斯' if BORIS in hero_src else ''}）")
+    for name, (kind, d) in safe.items():
+        sec(name, list(d.items()), f"friendly-safe {kind} copy (FRIENDLY_SAFE)")
+    rules.append_to_list("Warheads", [n for n, (k, _) in safe.items() if k == "warhead"])
+    rules.append_to_list("Projectiles", [n for n, (k, _) in safe.items() if k == "projectile"])
+    say(f"[rules] 英雄步兵解锁：{len(hero_src)} 个（任意兵营 + {BEACON}，含从挑战地图"
+        f"复原的鲍里斯）；不伤友军复制链 {len(safe)} 段：{sorted(safe)}")
 
     # --- superweapons ------------------------------------------------------
     for sw, deliver, cam, en_name, cn in SUPERWEAPONS:
@@ -716,6 +1012,28 @@ def build(dry=False):
         pairs += SW_TEMPLATE
         pairs += [("SidebarPCX", cam), ("Deliver.Types", deliver)]
         sec(sw, pairs, en_name)
+
+    # --- Touhou infantry ported from 东方秽浪港 (see abc_port.py) -----------
+    existing = ({s.upper() for s in rules.section_names()} |
+                {s.upper() for s in art.section_names()})
+    if use_abc:
+        abc = abc_port.build(ALL12_STR, existing, rules.items)
+    else:
+        abc = dict(rules={}, art={}, sounds={}, registrations={}, strings={},
+                   mix=None, mix_files=[], cameos={}, units=[], vehicles=[])
+    for L, vals in abc["registrations"].items():
+        if vals:
+            rules.append_to_list(L, vals)
+    su.append("; ---- Touhou infantry from ABC (abc_port.py) ----")
+    for name, d in abc["rules"].items():
+        sec(name, list(d.items()))
+    for name, d in abc["art"].items():
+        art.append_section(name, list(d.items()))
+    if use_abc:
+        say(f"[abc] 东方步兵 {len(abc['units'])} 个（任意兵营 + {BEACON}）+ 载具 "
+            f"{len(abc['vehicles'])} 辆（任意战车工厂 + {BEACON}），"
+            f"规则 {len(abc['rules'])} 段 / 美术 {len(abc['art'])} 段 / "
+            f"音效 {len(abc['sounds'])} 段 / 资源包 {len(abc['mix_files'])} 个文件")
 
     su.append("; >>> STARUNITY EX END <<<")
     rules.lines.extend(su)
@@ -726,13 +1044,14 @@ def build(dry=False):
     # ======================================================================
     # Clones carry a rules Image= that redirects to the stock entry, so model,
     # cameo and foundation all follow. Only the beacon (its donor prop has no
-    # cameo) gets an art section of its own, added above.
-    say("[art] 克隆体沿用原版美术条目；新增美术段：信标 1 个（带图标）")
+    # cameo) and the ABC infantry get art sections of their own, added above.
+    say("[art] 克隆体沿用原版美术条目；新增美术段：信标 1 个 + 东方步兵 "
+        f"{len(abc['art'])} 个")
 
     # ======================================================================
     # 4. ra2md.csf
     # ======================================================================
-    csf = Csf(os.path.join(BACKUP, "original", "ra2md.csf"))
+    csf = Csf(original("ra2md.csf"))
     added = 0
     for cy, (stock_mcv, mcv, conyard, cam, cn, en) in FACTION.items():
         csf.set(f"NAME:{mcv}", f"{cn}科技基地车")
@@ -744,12 +1063,15 @@ def build(dry=False):
     csf.set(f"NAME:{BEACON}", "远星支援信标")
     csf.set(f"NAME:{BEACON_SW}", "远星骑士团支援")
     added += 2
+    for label, value in abc["strings"].items():
+        csf.set(label, value)
+        added += 1
     say(f"[csf] 新增字符串：{added} 条")
 
     # ======================================================================
     # 5. MentalOmegaMaps.ini — unlock co-op for skirmish
     # ======================================================================
-    maps = Ini(os.path.join(BACKUP, "original", "MentalOmegaMaps.ini"), encoding="utf-8-sig")
+    maps = Ini(original(os.path.join("INI", "MentalOmegaMaps.ini")), encoding="utf-8-sig")
     killed = []
     # (a) the three Co-Op game-mode sections
     for mode in ("Co-Op Easy", "Co-Op Medium", "Co-Op Hard"):
@@ -787,6 +1109,13 @@ def build(dry=False):
     assert n_solo == 36, f"expected 36 entries, changed {n_solo}"
     assert n_mode == 6, f"expected 6 mode lines, removed {n_mode}"
     assert n_map_sec == 36, f"expected 36 map entries, cleared {n_map_sec}"
+    # (d) 12 skirmish maps from the QiEr pack (qier_maps.py): 3 reworked
+    #     classics + 9 special-event maps. MO units only; the two 决战山巅
+    #     maps [#include] SP_LIBRA.ini, deployed to the game root.
+    qier_files = qier_maps.build(maps) if use_qier else {}
+    if use_qier:
+        say(f"[maps] 企鹅包地图：{len(qier_maps.MAPS)} 张登记到 [MultiMaps]，"
+            f"部署到 MapsMO\\{qier_maps.FOLDER}\\ + {', '.join(qier_maps.EXTRA_FILES)}")
 
     # ======================================================================
     # 6. co-op maps — drop the engine-level multiplayer-only flag
@@ -795,8 +1124,10 @@ def build(dry=False):
     # level flags in MentalOmegaMaps.ini is not enough while the map files
     # themselves still carry it. Verified in game: a co-op map runs offline as
     # a skirmish with one AI ally and no errors.
-    coop_src = os.path.join(BACKUP, "Cooperative")
-    coop_out = os.path.join(OUTPUT, "Cooperative")
+    # Every step below is idempotent, so already patched maps come out
+    # unchanged (counts 0).
+    coop_src = original(COOP)
+    coop_out = os.path.join(OUTPUT, COOP)
     os.makedirs(coop_out, exist_ok=True)
     n_map = n_min = 0
     for fn in sorted(os.listdir(coop_src)):
@@ -861,48 +1192,143 @@ def build(dry=False):
         f"事件 {n_ev} 条 + 动作 {n_ac} 条 + 小队归属 {n_house} 条")
 
     # ======================================================================
-    # write everything out
+    # 6b. Fatal Impact — 4-hour mission timer, Volkov may ride transports
     # ======================================================================
-    dests = [OUTPUT] if dry else [OUTPUT, GAME]
-    for dest in dests:
-        os.makedirs(dest, exist_ok=True)
-        rules.save(os.path.join(dest, "rulesmo.ini"))
-        art.save(os.path.join(dest, "artmo.ini"))
-        stale = os.path.join(dest, "starunity.ini")
-        if os.path.exists(stale):
-            os.remove(stale)          # superseded: the block now lives in rules
-        csf.save(os.path.join(dest, "ra2md.csf"))
-        ini_dir = os.path.join(dest, "INI")
-        os.makedirs(ini_dir, exist_ok=True)
-        maps.save(os.path.join(ini_dir, "MentalOmegaMaps.ini"))
-        for f in sorted(os.listdir(CAMEOS)):
-            shutil.copy2(os.path.join(CAMEOS, f), os.path.join(dest, f))
-        coop_dest = os.path.join(dest, "MapsMO", "Cooperative")
-        if os.path.isdir(coop_dest):
-            for f in os.listdir(coop_out):
-                shutil.copy2(os.path.join(coop_out, f), os.path.join(coop_dest, f))
+    fatal = Ini(pristine(FATAL_MAP))
+    n_timer = 0
+    for tid in FATAL_TIMER_TRIGGERS:
+        parts = fatal.get("Actions", tid).split(",")
+        hits = [i for i in range(1, 1 + int(parts[0]) * 8, 8)
+                if parts[i] == "27" and parts[i + 2] == FATAL_TIMER_FROM]
+        assert len(hits) == 1, (tid, parts)
+        parts[hits[0] + 2] = FATAL_TIMER_TO
+        fatal.set_key("Actions", tid, ",".join(parts))
+        n_timer += 1
+    assert fatal.get("VOLKOV", "Size") == FATAL_VOLKOV_SIZE[0]
+    fatal.set_key("VOLKOV", "Size", FATAL_VOLKOV_SIZE[1])
+    fatal.save(os.path.join(OUTPUT, FATAL_MAP))
+    say(f"[maps] 致命冲击：主任务计时 {n_timer} 处 {FATAL_TIMER_FROM}→{FATAL_TIMER_TO} 秒"
+        f"（4 小时），变身前沃尔科夫体积 {FATAL_VOLKOV_SIZE[0]}→{FATAL_VOLKOV_SIZE[1]}（可上载具）")
+
+    # ======================================================================
+    # 7. soundmo.ini — the ABC units' sound events
+    # ======================================================================
+    # MO normally reads soundmo.ini from expandmo99.mix; a loose copy in the
+    # game folder takes precedence, so it is pristine + the ABC block.
+    sound = Ini(pristine("soundmo.ini"))
+    sound.append_to_list("SoundList", list(abc["sounds"]))
+    for name, d in abc["sounds"].items():
+        sound.append_section(name, list(d.items()))
+    say(f"[sound] 新增音效事件：{len(abc['sounds'])} 条")
+
+    # ======================================================================
+    # 8. MOAutoRepair.dll — rebuilt from source when zig is installed
+    # ======================================================================
+    sys.path.insert(0, AUTOREPAIR_DIR)
+    import build as autorepair_build
+    try:
+        import ziglang  # noqa: F401
+        autorepair_build.build()
+        say("[plugin] 玩家建筑自动维修插件 MOAutoRepair.dll 已从源码编译并通过结构检查")
+    except ImportError:
+        autorepair_build.check()
+        say("[plugin] 没装 ziglang，用仓库里编好的 MOAutoRepair.dll（结构检查通过）")
+
+    # ======================================================================
+    # 9. uimd.ini + Phobos — the Phobos UI features (see PHOBOS_FILES)
+    # ======================================================================
+    if use_phobos:
+        ui = Ini(pristine("uimd.ini"))
+        n_ui = 0
+        for section, pairs in UIMD_KEYS:
+            if ui.has_section(section):
+                for k, v in pairs:
+                    ui.set_key(section, k, v)
+            else:
+                ui.append_section(section, pairs)
+            n_ui += len(pairs)
+        assert b"SyringeEx" in open(paths.SYRINGE_EX, "rb").read(), paths.SYRINGE_EX
+        client = Ini(original(CLIENT_DEFS))
+        for k, v in CLIENT_LAUNCH:
+            assert client.get("Settings", k) is not None, f"[Settings] {k} missing"
+            if v is None:
+                client.delete_key("Settings", k)
+            else:
+                client.set_key("Settings", k, v)
+        say(f"[phobos] uimd.ini 打开 {n_ui} 个 Phobos 界面开关；部署 {', '.join(PHOBOS_FILES)}；"
+            "加载器换 SyringeEx 0.7.2.0，客户端启动参数改为 SyringeEx 语法")
+
+    # ======================================================================
+    # write everything into <work>/output (laid out like the game folder),
+    # then copy it into the game
+    # ======================================================================
+    def out(rel):
+        p = os.path.join(OUTPUT, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        written.add(rel)
+        return p
+
+    written = set()
+    rules.save(out("rulesmo.ini"))
+    art.save(out("artmo.ini"))
+    csf.save(out("ra2md.csf"))
+    maps.save(out(os.path.join("INI", "MentalOmegaMaps.ini")))
+    for f in sorted(os.listdir(paths.CAMEOS)):
+        shutil.copy2(os.path.join(paths.CAMEOS, f), out(f))
+    if use_abc:                                  # otherwise identical to stock
+        sound.save(out("soundmo.ini"))
+    written.add(FATAL_MAP)                       # saved in 6b
+    written |= {os.path.join(COOP, f) for f in os.listdir(coop_out)}
+    shutil.copy2(AUTOREPAIR_DLL, out(os.path.basename(AUTOREPAIR_DLL)))
+    for f, b in hero_files.items():              # the pcx are already there
+        with open(out(f), "wb") as fh:
+            fh.write(b)
+    if use_phobos:
+        ui.save(out("uimd.ini"))
+        for f in PHOBOS_FILES:
+            shutil.copy2(os.path.join(paths.PHOBOS_DIR, f), out(f))
+        shutil.copy2(paths.SYRINGE_EX, out("Syringe.exe"))
+        client.save(out(CLIENT_DEFS))
+    if use_abc:
+        with open(out(abc_port.MIX_NAME), "wb") as fh:
+            fh.write(abc["mix"])
+        for f, b in abc["cameos"].items():
+            with open(out(f), "wb") as fh:
+                fh.write(b)
+    for rel, src in qier_files.items():
+        shutil.copy2(src, out(rel))
     with open(os.path.join(OUTPUT, "starunity_block.ini"), "w",
               encoding="latin-1", newline="") as fh:
-        fh.write(text)                # human-readable copy of the added block
-    say(f"写出完成 -> {', '.join(dests)}")
+        fh.write(text)                # human-readable copy, never deployed
+    if dry:
+        say(f"写出完成 -> {OUTPUT}（--dry：没动游戏）")
+    else:
+        deploy(sorted(written))
+        say(f"写出完成 -> {OUTPUT}，并部署 {len(written)} 个文件到 {paths.GAME}")
     return dict(g1=g1, g2=g2, clone_id=clone_id, generic_for=generic_for)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Noob Edition patch generator")
-    ap.add_argument("--game", required=True,
-                    help="path to your Mental Omega 3.3.6 installation")
-    ap.add_argument("--work", default=None,
-                    help="scratch + backup directory (default: <repo>/work)")
+    paths.add_args(ap)
     ap.add_argument("--dry", action="store_true",
-                    help="build into work/output only, do not touch the game")
+                    help="build into <work>/output only, do not touch the game")
     ap.add_argument("--restore", action="store_true",
-                    help="undo the patch and exit")
+                    help="put the game back exactly as it was, then exit")
+    ap.add_argument("--qier", metavar="DIR",
+                    help="snapshot Phobos + the 12 maps from the 企鹅的心灵终结 v1.1 folder")
+    ap.add_argument("--abc", metavar="DIR",
+                    help="snapshot the Touhou port from 东方秽浪港's Game folder")
     args = ap.parse_args()
-    configure(args)
+    paths.configure(args, remember=True)
     if args.restore:
         restore()
         return
+    prepare()
+    if args.qier:
+        qier_maps.extract(os.path.abspath(args.qier))
+    if args.abc:
+        abc_port.extract(os.path.abspath(args.abc))
     build(dry=args.dry)
 
 

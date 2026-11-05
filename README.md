@@ -159,7 +159,7 @@ Omega's *Blackout Research Station* prop — the donor art has no `Buildup=`, so
 it appears without a construction animation. Cosmetic only. The prop has no
 sidebar icon; the beacon gets one of its own.
 
-It does three things.
+It does four things.
 
 **Doubles as seven tech buildings** — owning it is as good as holding all of:
 
@@ -177,6 +177,11 @@ The effects are plain building tags (`Academy.*Veterancy`,
 `UnitsGainSelfHeal`, `InfantryGainSelfHeal`). The patcher **reads them out of
 the seven stock buildings** at build time and merges them onto the beacon —
 nothing copied by hand, and the stock buildings stay untouched.
+
+**Doubles as a Grinder** — send any unit of yours into it and it is recycled
+for half its cost, exactly like Epsilon's Grinder (`Grinding=yes` and the
+enter cursor are read from the stock `YAGRND`). There is no grinding
+animation; the unit simply goes in and turns into money.
 
 **Carries the Far Star Knights Aid support power** — built from MO's own
 `PaladinAidSpecial`, so it behaves like a stock power:
@@ -214,15 +219,16 @@ for a generic tech building accepts it.
 
 ### 7. Hero infantry
 
-**22** hero infantry — Tanya, Siegfried, Volkov, Morales, Yunru, Rahn,
+**21** hero infantry — Tanya, Siegfried, Volkov, Morales, Yunru, Rahn,
 Libra, Eureka, Yuri, Reznov, Krukov, Rhad, Boris and the rest — become
 buildable at **any faction's barracks** once the Far Star Support Beacon
 stands.
 
 They are identified from Mental Omega's own `[ArmorTypes]` *Heroes Infantry
 Group* block rather than by name, so the list cannot drift if MO renames
-anything. Skipped: `AIMORA`, the AI-only duplicate of Morales, and the three
-easter-egg action-movie commandos (`ARND` / `STLN` / `CLNT`).
+anything. Skipped: `AIMORA`, the AI-only duplicate of Morales, the three
+easter-egg action-movie commandos (`ARND` / `STLN` / `CLNT`) and Libra's
+clone (`LIBRC`).
 
 - **Boris** is not in Mental Omega's rules at all — MO defines him per map
   (the Soviet 1 map only sets his TechLevel). The patcher reads MO's own full
@@ -233,20 +239,63 @@ easter-egg action-movie commandos (`ARND` / `STLN` / `CLNT`).
 - **Build time**: MO gives its campaign-only heroes — Reznov, Krukov, Rhad,
   the Space Commando, Yuri X — a 121x build time, a de facto lock. The clones
   get the ordinary heroes' 2x.
+- **Yuri** gets a sidebar icon: stock `YURIX` art has none, so the clone gets
+  its own art entry and the unused Yuri portrait from MO's mixes, relabelled.
 - Every hero clone self-heals.
 
 As everywhere else, these are `SU*` clones; the stock heroes are untouched.
+
+### 8. Two campaign missions eased
+
+- **Soviet finale, *Death's Hand*** — the boss's two weapons (`DeathBolt` /
+  `DeathBoltAA`) do 1 damage and fire 10x slower. No unit in the rules uses
+  them; only that mission's map arms the boss with them, so nothing else moves.
+- **Fatal Impact** — the main mission timer goes from 160 minutes to **4
+  hours**, and Volkov fits into transports before his transformation. A loose
+  `sfatal.map` is written into the game folder (the engine reads loose files
+  before the mixes); exactly four lines differ from MO's.
+
+### 9. Player buildings repair themselves
+
+The AI's buildings start repairing the moment they are damaged; the player has
+to click the wrench on each one. `MOAutoRepair.dll` is a small Syringe plugin
+(source in `tools/autorepair/`, no C runtime, no imports, 4.6 KB) that does the
+clicking for you: every 30 frames it finds your damaged buildings that the
+engine would let you repair and sends the very same repair event the wrench
+sends. Repairs cost money as usual. Its one hook overlaps none of Ares'.
+
+### 10. Optional extras, from other mods you already have
+
+These are built only if you point the patcher at your own copy of the mod they
+come from (see *Install*). Nothing from them is in this repository.
+
+- **Phobos UI** (from *企鹅的心灵终结 v1.1*, `--qier`): superweapon sidebar
+  (3 columns), harvester counter, power delta, a centred message board with
+  history, extended tooltips, power-plant enhancer range. Phobos needs its own
+  Syringe fork, so `Syringe.exe` becomes SyringeEx 0.7.2.0 and the client's
+  launch line in `Resources/ClientDefinitions.ini` changes to SyringeEx's
+  syntax (keeping MO's `-SPEEDCONTROL` and `-AFFINITY`). Restart the client
+  fully afterwards. Shows Phobos' own "pre-release build" watermark.
+- **12 skirmish maps** (same pack, `--qier`): three reworked classics and nine
+  "special event" maps. They use Mental Omega's own units only. The pack's
+  reworked *East Wind Valley* is left out on purpose: it pulls in the pack's
+  whole rebalance.
+- **Touhou infantry** (from *东方秽浪港 ~ Ambitions Behind Corpse.*, `--abc`):
+  ten character infantry plus that mod's Prism Tank, buildable at any barracks
+  / war factory with the Far Star Support Beacon, renamed into their own
+  `ABC_*` namespace with their assets in `expandmo93.mix`.
 
 ---
 
 ## Install
 
 You need your own legal copy of **Mental Omega 3.3.6**. This repository ships
-**no** Mental Omega content — the patcher reads the pristine rules out of your
-installation's `expandmo99.mix` and writes the patched result back.
+**no** Mental Omega content — the patcher reads the pristine data out of your
+installation's own mix files and writes the patched result back.
 
-Requires Python 3.8+ (`pip install pillow` only if you want to regenerate the
-cameo icons; the eight PCX files are already included).
+Requires Python 3.8+ and `pip install pillow pefile` (the Yuri icon is drawn at
+build time; `pefile` checks the plugin). `pip install ziglang` only if you want
+the auto-repair plugin rebuilt from source — a built copy is included.
 
 ```bash
 git clone https://github.com/starunity1789-bot/mental-omega-noob-edition.git
@@ -254,18 +303,26 @@ cd mental-omega-noob-edition
 python tools/build_mod.py --game "D:/Games/Mental Omega"
 ```
 
-The first run snapshots every file it is about to touch into `work/backup/`.
+The first run snapshots every game file it is about to replace into
+`work/original/` and records every file it adds, then remembers the paths in
+`local.json`, so later commands need no `--game`.
 
 ```bash
 # build without touching the game, for inspection
-python tools/build_mod.py --game "..." --dry
+python tools/build_mod.py --dry
 
 # prove the patch changes nothing for a normal player
-python tools/validate.py --game "..."
+python tools/validate.py
 
 # undo everything, byte for byte
-python tools/build_mod.py --game "..." --restore
+python tools/build_mod.py --restore
+
+# the optional extras: snapshot once, rebuilt on every later run
+python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/Games/东方秽浪港/Game"
 ```
+
+Leaving an optional part out later (deleting its snapshot under `work/`) puts
+the files it had replaced back the way they were on the next run.
 
 Tool output is in Chinese, since that is who this is for.
 
@@ -287,7 +344,7 @@ Tool output is in Chinese, since that is who this is for.
 - **Beacon gate** — the ten stolen-tech clones are unbuildable without the
   beacon standing and all ten are buildable with it, and the ten stock entries
   are compared key by key against pristine to prove they never moved.
-- **Hero gate** — same proof for the 22 hero clones, plus a key-by-key check
+- **Hero gate** — same proof for the 21 hero clones, plus a key-by-key check
   that no stock hero's stats, weapons or art changed; the easter-egg units
   are not cloned; every clone self-heals and builds in at most 2x time; Boris
   matches the map's definition key by key.
@@ -296,6 +353,11 @@ Tool output is in Chinese, since that is who this is for.
 - **Battle Lab gate** — `SUGATECH` needs the Allied tech yard and nothing else.
 - **Co-op ownership** — no reference to slot 2 survives in any co-op map's
   events or actions, and every map plus every client entry accepts one player.
+- **The rest** — the Grinder keys match `YAGRND`; Death's Hand changed only
+  its two weapons' two keys; *Fatal Impact* differs from MO's map in exactly
+  four lines; the auto-repair hook overlaps no Ares hook; and, when built,
+  every optional part (Phobos hooks vs Ares and the plugin, map entries,
+  Touhou assets findable in the mix) is checked too.
 
 It was also checked in game against Ares' own parser log, same map and seed,
 stock rules versus patched:
@@ -323,9 +385,12 @@ ships 1156 `BuildingTypes`, over the 512 Ares warns about.)
 text and balance design belong to them.
 
 This repository claims none of it. It contains only patch scripts, eight
-cameo icons drawn for the new support powers and the beacon, and
-documentation. Every byte of game
-content is read from, and written back to, your own installation.
+cameo icons drawn for the new support powers and the beacon, the auto-repair
+plugin (source and a build of it), and documentation. Every byte of game
+content is read from, and written back to, your own installation. The same
+goes for the optional extras: Phobos and SyringeEx, the QiEr pack's maps and
+the Touhou units are read from your own copies of those mods and belong to
+their authors.
 
 Mental Omega's own readme asks that it not be re-uploaded without permission,
 which is exactly why this is a patcher and not a repack. **Get the game from
@@ -340,3 +405,6 @@ would like it taken down, it will be.
 - Speeder and the Mentalmeisters — Mental Omega
 - AlexB — Ares
 - The CnCNet team — client and multiplayer infrastructure
+- The Phobos team — Phobos and SyringeEx (optional UI features, GPL-3.0)
+- The authors of *企鹅的心灵终结 v1.1* — the Phobos setup and the 12 maps
+- The authors of *东方秽浪港 ~ Ambitions Behind Corpse.* — the Touhou units

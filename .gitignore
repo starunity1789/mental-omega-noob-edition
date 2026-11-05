@@ -1,5 +1,7 @@
 # scratch + backups produced by tools/build_mod.py
 work/
+# paths remembered by tools/paths.py
+local.json
 
 # python
 __pycache__/

@@ -20,12 +20,24 @@ NO GAME CONTENT IS DISTRIBUTED HERE
 -----------------------------------
 This repository contains only:
   - patch scripts (tools/)
-  - six cameo icons drawn for the support powers this patch adds (cameos/)
+  - eight cameo icons drawn for the support powers and the beacon (cameos/)
+  - MOAutoRepair, a small Syringe plugin written for this project, as source
+    and as a build (tools/autorepair/)
   - documentation (README.md, README.zh-CN.md, docs/)
 
-The patcher reads Mental Omega's pristine data out of the copy of
-expandmo99.mix inside YOUR OWN installation, applies its changes, and writes
-the result back into YOUR OWN installation. Nothing is redistributed.
+The patcher reads Mental Omega's pristine data out of the mix files inside
+YOUR OWN installation, applies its changes, and writes the result back into
+YOUR OWN installation. Nothing is redistributed.
+
+OPTIONAL PARTS FROM OTHER MODS
+------------------------------
+Some optional features are built only from YOUR OWN copies of other mods,
+read at patch time. None of their files are in this repository:
+  - Phobos and SyringeEx (GPL-3.0, the Phobos team), as shipped in
+    "企鹅的心灵终结 v1.1"
+  - 12 skirmish maps from "企鹅的心灵终结 v1.1", property of its authors
+  - character infantry from "东方秽浪港 ~ Ambitions Behind Corpse.",
+    property of its authors
 
 Mental Omega's readme asks that it not be re-uploaded without the team's
 explicit permission. Please obtain the game only from https://mentalomega.com

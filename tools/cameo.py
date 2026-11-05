@@ -166,6 +166,17 @@ def decimator_icon(out_path):
     return out_path
 
 
+def relabel_icon(base_pcx, label, faction, out_path):
+    """A stock portrait cameo under a new name: the old label band is covered
+    by the faction frame and a new label band (same look as the MCV icons)."""
+    f = FACTIONS[faction]
+    big = Image.open(base_pcx).convert("RGB").resize((W * S, H * S), Image.LANCZOS)
+    _band_and_frame(big, label, f["color"], f["dark"])
+    im = _finish(big)
+    im.save(out_path)
+    return out_path
+
+
 def contact_sheet(paths, out_png, scale=4):
     ims = [Image.open(p).convert("RGB") for p in paths]
     sheet = Image.new("RGB", (W * len(ims), H), (0, 0, 0))
