@@ -234,6 +234,13 @@ Syringe 插件（源码在 `tools/autorepair/`，不带 C 运行库、无导入�
 - **东方角色步兵**（来自「东方秽浪港 ~ Ambitions Behind Corpse.」，`--abc`）：
   10 个角色步兵 + 秽浪港的光棱坦克，有远星支援信标时任意兵营 / 战车工厂可造；
   全部改名进独立的 `ABC_*` 命名空间，素材打包成 `expandmo93.mix`。
+- **玩家自制任务**（来自「Mental Omega World」，`--mow`）：21 个单人任务 —— 天蝎组织编年史、
+  越南战争、反转红警2，以及十几个独立行动 —— **追加**到你现有的战役菜单末尾。
+  它自己的安装方式会把战役菜单（`INI/BattleClient.ini`）和简报文件（`missionmo.ini`）
+  整个换成只有它自己任务的版本，心灵终结原版战役和别的任务包都会从菜单里消失；
+  这里改成合并，而且以后别的任务包再改菜单，下次生成也会保留那份改动。
+  它中文版里还是英文的菜单标题换成了中文（重玩 MO 原版关卡的用官方译名），
+  顺手修了它的两个 bug：一个菜单条目重复，以及盟军「火星火花」点进去载入的是焚风版地图。
 
 ---
 
@@ -265,7 +272,7 @@ python tools/validate.py
 python tools/build_mod.py --restore
 
 # 可选内容：快照一次，以后每次生成都会带上
-python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/Games/东方秽浪港/Game"
+python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/Games/东方秽浪港/Game"     --mow "D:/Mods/MentalOmegaWorld"     # git clone 下来的 MahBoiDeveloper/MentalOmegaWorld
 ```
 
 以后不想要某个可选内容了（删掉 `work/` 下它的快照），下一次生成时它替换过的文件会自动复原。
@@ -321,7 +328,7 @@ python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/G
 **本仓库不主张其中任何一项的权利。** 仓库里只有补丁脚本、为新支援技能和信标画的
 八个图标、自动维修插件（源码和编好的一份），以及文档。每一个字节的游戏内容都是从你自己的
 安装目录读入、再写回你自己的安装目录。可选内容也一样：Phobos 与 SyringeEx、企鹅包的地图、
-东方角色，都是从你自己那份 MOD 里读取，版权归各自作者。
+东方角色、Mental Omega World 的任务，都是从你自己那份 MOD 里读取，版权归各自作者。
 
 心灵终结官方 readme 明确要求未经许可不得转载其文件 —— 这正是本项目做成「补丁器」
 而不是「整合包」的原因。**请只从 [mentalomega.com](https://mentalomega.com)
@@ -338,3 +345,5 @@ python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/G
 - Phobos 团队 —— Phobos 与 SyringeEx（可选的界面增强，GPL-3.0）
 - 「企鹅的心灵终结 v1.1」的作者 —— Phobos 的配置和 12 张地图
 - 「东方秽浪港 ~ Ambitions Behind Corpse.」的作者 —— 东方角色
+- mah_boi 与 [Mental Omega World](https://github.com/MahBoiDeveloper/MentalOmegaWorld)
+  里署名的各位任务作者（CC BY-NC 4.0）—— 玩家自制任务

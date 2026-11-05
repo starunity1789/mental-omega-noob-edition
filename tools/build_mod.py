@@ -13,6 +13,7 @@ into the game folder. Every file it replaces is snapshotted first.
 Optional parts, snapshotted once into <work> and rebuilt on every later run:
   --qier "<企鹅的心灵终结 v1.1 folder>"   Phobos UI features + 12 skirmish maps
   --abc  "<东方秽浪港 install>/Game"      Touhou infantry + ABC Prism Tank
+  --mow  "<MentalOmegaWorld checkout>"    21 fan missions, merged into the menu
 Without them those parts are simply left out. See paths.py for the layout.
 
 What it produces
@@ -27,7 +28,9 @@ What it produces
   MOAutoRepair.dll       player buildings repair themselves
   *.pcx, suyurix*        cameos (support powers, beacon, Yuri)
   optional               Phobos + SyringeEx + uimd.ini + client launch line,
-                         MapsMO/qier_maps/* + SP_LIBRA.ini, expandmo93.mix + abc*.pcx
+                         MapsMO/qier_maps/* + SP_LIBRA.ini, expandmo93.mix + abc*.pcx,
+                         INI/BattleClient.ini + missionmo.ini (appended),
+                         expandmo42.mix + stringtable42.csf
   (work only) starunity_block.ini — readable copy of the appended block
 
 Why one file instead of an [#include]: [GenericPrerequisites] is evaluated
@@ -53,6 +56,7 @@ from mixtool import extract                              # noqa: E402
 import cameo                                             # noqa: E402
 import abc_port                                          # noqa: E402
 import qier_maps                                         # noqa: E402
+import mow                                               # noqa: E402
 
 P = "SU"                       # ID prefix — verified collision-free in MO 3.3.6
 
@@ -358,7 +362,7 @@ UIMD_KEYS = [
 # --------------------------------------------------------------------------
 MARKER = "STARUNITY EX BEGIN"        # sentinel written into rulesmo.ini
 # read out of the game's own mixes, newest first (the engine's priority)
-FROM_MIX = ["rulesmo.ini", "artmo.ini", "soundmo.ini", "uimd.ini",
+FROM_MIX = ["rulesmo.ini", "artmo.ini", "soundmo.ini", "uimd.ini", "missionmo.ini",
             FATAL_MAP, "yurix.shp", "yuriicon.pcx", "yuriuico.pcx"]
 MIXES = ["expandmo%02d.mix" % n for n in (99, 98, 97, 96, 95, 94)]
 # loose stock files read but never written
@@ -367,6 +371,10 @@ FROM_LOOSE = {BORIS_MAP: os.path.join("MapsMO", "Challenge", BORIS_MAP)}
 # anything is written, and the build reads the snapshot
 INPUTS = ["ra2md.csf", os.path.join("INI", "MentalOmegaMaps.ini"), CLIENT_DEFS]
 COOP = os.path.join("MapsMO", "Cooperative")
+# read and rewritten only when Mental Omega World is merged in. Other mission
+# packs install their own copies of these, so a game copy that matches neither
+# the snapshot nor our last output is taken as the new original.
+MOW_INPUTS = [mow.BATTLE, mow.MISSION]
 
 log = []
 
@@ -466,6 +474,40 @@ def prepare():
         man["replaced"] += todo
         save_manifest(man)
         say(f"[prepare] 快照了游戏原有文件 {len(todo)} 个 -> {paths.ORIGINAL}")
+    if mow.available():
+        man = load_manifest()
+        for rel in MOW_INPUTS:
+            game_f = os.path.join(paths.GAME, rel)
+            if not os.path.isfile(game_f):
+                continue                 # the build falls back to the mix copy
+            cur = open(game_f, "rb").read()
+            last = os.path.join(paths.OUTPUT, rel)
+            if os.path.isfile(original(rel)):
+                if cur == open(original(rel), "rb").read() or                         (os.path.isfile(last) and cur == open(last, "rb").read()):
+                    continue
+                say(f"[prepare] 游戏里的 {rel} 被别的东西改过（新装了任务包？），"
+                    "去掉我们追加的部分后以它为新的原件")
+                enc = "utf-8-sig" if rel == mow.BATTLE else "latin-1"
+                ini = Ini(game_f, encoding=enc)
+                mow.unmerge(rel, ini, Ini(original(rel), encoding=enc))
+                ini.save(original(rel))
+            else:
+                os.makedirs(os.path.dirname(original(rel)) or paths.ORIGINAL, exist_ok=True)
+                shutil.copy2(game_f, original(rel))
+            if rel not in man["replaced"]:
+                man["added"] = [x for x in man["added"] if x != rel]
+                man["replaced"].append(rel)
+        save_manifest(man)
+
+
+def game_input(rel):
+    """A game file read as input: the snapshot if the game had its own copy,
+    else the stock copy from the mixes."""
+    if os.path.isfile(original(rel)):
+        return original(rel)
+    if os.path.isfile(pristine(os.path.basename(rel))):
+        return pristine(os.path.basename(rel))
+    raise SystemExit(f"missing {rel} in the game folder")
 
 
 def deploy(rels):
@@ -579,8 +621,9 @@ def build(dry=False):
     shutil.rmtree(OUTPUT, ignore_errors=True)   # output mirrors this build only
     os.makedirs(OUTPUT)
     use_abc, use_qier, use_phobos = paths.have_abc(), paths.have_qier_maps(), paths.have_phobos()
-    say("[optional] 东方/秽浪港移植 %s，企鹅包地图 %s，Phobos 界面 %s" % tuple(
-        "开" if x else "关（没有快照）" for x in (use_abc, use_qier, use_phobos)))
+    use_mow = mow.available()
+    say("[optional] 东方/秽浪港移植 %s，企鹅包地图 %s，Phobos 界面 %s，Mental Omega World %s" % tuple(
+        "开" if x else "关（没有快照）" for x in (use_abc, use_qier, use_phobos, use_mow)))
 
     rules = Ini(pristine("rulesmo.ini"))
     art = Ini(pristine("artmo.ini"))
@@ -1118,6 +1161,17 @@ def build(dry=False):
             f"部署到 MapsMO\\{qier_maps.FOLDER}\\ + {', '.join(qier_maps.EXTRA_FILES)}")
 
     # ======================================================================
+    # 5b. Mental Omega World — fan missions appended to the campaign menu
+    # ======================================================================
+    if use_mow:
+        battle = Ini(game_input(mow.BATTLE), encoding="utf-8-sig")
+        mission = Ini(game_input(mow.MISSION))
+        mow_files, st = mow.build(battle, mission)
+        say(f"[mow] Mental Omega World：{st['missions']} 个任务（{st['groups']} 个菜单分组）追加到战役菜单末尾，"
+            f"简报 {st['briefings']} 段；{st['maps']} 张地图 + 载入图打包成 {mow.MIX_NAME}"
+            f"（{st['mix_files']} 个文件），中文字符串 {mow.CSF_NAME}")
+
+    # ======================================================================
     # 6. co-op maps — drop the engine-level multiplayer-only flag
     # ======================================================================
     # [Basic] MultiplayerOnly=1 marks the map as lobby-only. Clearing the mode
@@ -1297,6 +1351,12 @@ def build(dry=False):
                 fh.write(b)
     for rel, src in qier_files.items():
         shutil.copy2(src, out(rel))
+    if use_mow:
+        battle.save(out(mow.BATTLE))
+        mission.save(out(mow.MISSION))
+        for f, b in mow_files.items():
+            with open(out(f), "wb") as fh:
+                fh.write(b)
     with open(os.path.join(OUTPUT, "starunity_block.ini"), "w",
               encoding="latin-1", newline="") as fh:
         fh.write(text)                # human-readable copy, never deployed
@@ -1317,6 +1377,8 @@ def main():
                     help="put the game back exactly as it was, then exit")
     ap.add_argument("--qier", metavar="DIR",
                     help="snapshot Phobos + the 12 maps from the 企鹅的心灵终结 v1.1 folder")
+    ap.add_argument("--mow", metavar="DIR",
+                    help="snapshot the Mental Omega World missions from its checkout")
     ap.add_argument("--abc", metavar="DIR",
                     help="snapshot the Touhou port from 东方秽浪港's Game folder")
     args = ap.parse_args()
@@ -1324,11 +1386,13 @@ def main():
     if args.restore:
         restore()
         return
-    prepare()
     if args.qier:
         qier_maps.extract(os.path.abspath(args.qier))
     if args.abc:
         abc_port.extract(os.path.abspath(args.abc))
+    if args.mow:
+        mow.extract(os.path.abspath(args.mow))
+    prepare()
     build(dry=args.dry)
 
 

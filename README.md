@@ -284,6 +284,17 @@ come from (see *Install*). Nothing from them is in this repository.
   ten character infantry plus that mod's Prism Tank, buildable at any barracks
   / war factory with the Far Star Support Beacon, renamed into their own
   `ABC_*` namespace with their assets in `expandmo93.mix`.
+- **Fan-made missions** (from *Mental Omega World*, `--mow`): 21 single-player
+  missions — Scorpion Cell Chronicles, the Vietnam War campaign, Flipped
+  APRA2 and a dozen standalone operations — **appended** to the campaign menu
+  you already have. The pack's own installer replaces the menu
+  (`INI/BattleClient.ini`) and the briefing file (`missionmo.ini`) with
+  files listing only its missions, which drops Mental Omega's campaigns and
+  any other mission pack; here both are merged instead, and if another pack
+  later rewrites the menu, the next run keeps that change. Menu titles the
+  pack left in English get Chinese ones (official MO names where a mission
+  replays an MO level), and two bugs in the pack are fixed: a duplicated
+  menu entry, and the Allied *Spark On The Mars* loading the Foehn map.
 
 ---
 
@@ -318,7 +329,7 @@ python tools/validate.py
 python tools/build_mod.py --restore
 
 # the optional extras: snapshot once, rebuilt on every later run
-python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/Games/东方秽浪港/Game"
+python tools/build_mod.py --qier "D:/Mods/企鹅的心灵终结v1.1" --abc "D:/Games/东方秽浪港/Game"     --mow "D:/Mods/MentalOmegaWorld"     # a git clone of MahBoiDeveloper/MentalOmegaWorld
 ```
 
 Leaving an optional part out later (deleting its snapshot under `work/`) puts
@@ -388,9 +399,9 @@ This repository claims none of it. It contains only patch scripts, eight
 cameo icons drawn for the new support powers and the beacon, the auto-repair
 plugin (source and a build of it), and documentation. Every byte of game
 content is read from, and written back to, your own installation. The same
-goes for the optional extras: Phobos and SyringeEx, the QiEr pack's maps and
-the Touhou units are read from your own copies of those mods and belong to
-their authors.
+goes for the optional extras: Phobos and SyringeEx, the QiEr pack's maps, the
+Touhou units and the Mental Omega World missions are read from your own copies
+of those mods and belong to their authors.
 
 Mental Omega's own readme asks that it not be re-uploaded without permission,
 which is exactly why this is a patcher and not a repack. **Get the game from
@@ -408,3 +419,6 @@ would like it taken down, it will be.
 - The Phobos team — Phobos and SyringeEx (optional UI features, GPL-3.0)
 - The authors of *企鹅的心灵终结 v1.1* — the Phobos setup and the 12 maps
 - The authors of *东方秽浪港 ~ Ambitions Behind Corpse.* — the Touhou units
+- mah_boi and the mission authors credited in
+  [Mental Omega World](https://github.com/MahBoiDeveloper/MentalOmegaWorld)
+  (CC BY-NC 4.0) — the fan-made missions

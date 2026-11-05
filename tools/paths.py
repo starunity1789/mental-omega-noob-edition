@@ -12,6 +12,7 @@ module globals, read as paths.GAME, paths.PRISTINE, ...
   <work>/third_party/       optional, snapshotted with --qier:
       phobos/               Phobos.dll + .pdb + SyringeEx (the UI features)
       qier_maps/            the 12 skirmish maps
+      mow/                  Mental Omega World missions (snapshotted with --mow)
   <work>/abc_source/        optional, snapshotted with --abc: the Touhou port
 
 --game and --work are remembered in <repo>/local.json (git-ignored), so later

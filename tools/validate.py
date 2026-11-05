@@ -122,6 +122,69 @@ def closure(tree, country, seed):
     return out
 
 
+def check_mow(mow):
+    """Mental Omega World: appended, never replacing. Everything the game's
+    own menu and briefing file had is still there, unchanged and in order;
+    every new menu entry resolves to a map that is in the new mix."""
+    import struct
+    import abc_port as ap
+    from csftool import Csf
+    from mixtool import find
+    import build_mod as bm
+    bad = []
+    bc_old = Ini(bm.game_input(mow.BATTLE), encoding="utf-8-sig")
+    bc = Ini(os.path.join(OUT, mow.BATTLE), encoding="utf-8-sig")
+    dup = sorted(set(bc.duplicates()) - set(bc_old.duplicates()))
+    if dup:
+        bad.append(f"菜单有新的重复段 {dup[:3]}")
+    moved = [s for s in bc_old.section_names()            # [Battles]: prefix check below
+             if s != "Battles" and bc_old.items(s) != bc.items(s)]
+    old_b, new_b = list(bc_old.items("Battles").items()), list(bc.items("Battles").items())
+    if moved or new_b[:len(old_b)] != old_b:
+        bad.append(f"原有菜单被改动 {moved[:3]} / [Battles] 前缀一致 {new_b[:len(old_b)] == old_b}")
+    added = new_b[len(old_b):]
+    raw = open(os.path.join(OUT, mow.MIX_NAME), "rb").read()
+    _, count, _ = struct.unpack_from("<IHI", raw)
+    ids = {struct.unpack_from("<I", raw, 10 + i * 12)[0] for i in range(count)}
+    mm_old = Ini(bm.game_input(mow.MISSION))
+    mm = Ini(os.path.join(OUT, mow.MISSION))
+    mm_moved = [s for s in mm_old.section_names() if mm_old.items(s) != mm.items(s)]
+    if mm_moved:
+        bad.append(f"原有简报被改动 {mm_moved[:3]}")
+    missions = [v for k, v in added if not v.upper().startswith("X")]
+    for sec in {v for _, v in added}:
+        if not bc.has_section(sec):
+            bad.append(f"菜单项 {sec} 没有定义")
+    for sec in missions:
+        scen = bc.get(sec, "Scenario") or ""
+        if ap.mix_id(scen) not in ids:
+            bad.append(f"{sec} 的地图 {scen} 不在 {mow.MIX_NAME}")
+        if not mm.has_section(scen):
+            bad.append(f"{scen} 没有简报段")
+        bkg = mm.get(scen, "LS800BkgdName")
+        if bkg and ap.mix_id(bkg) not in ids and bkg not in find(
+                [os.path.join(GAME, f"expandmo{n:02d}.mix") for n in (99, 98, 97, 96, 95, 94)], [bkg]):
+            bad.append(f"{scen} 的载入图 {bkg} 找不到")
+    for sec, title in mow.ZH_TITLES.items():
+        if bc.has_section(sec) and bc.get(sec, "Description") != title:
+            bad.append(f"{sec} 标题没换成中文")
+    for sec, (k, _old, new) in mow.FIXES.items():
+        if bc.get(sec, k) != new:
+            bad.append(f"{sec}.{k} 没修正")
+    csf_out = os.path.join(OUT, mow.CSF_NAME)
+    same = open(csf_out, "rb").read() == open(os.path.join(mow.snap(), mow.CSF_NAME), "rb").read()
+    l42 = {n.lower() for n, _ in Csf(csf_out).labels}
+    l_base = {n.lower() for n, _ in Csf(os.path.join(paths.ORIGINAL, "ra2md.csf")).labels}
+    if not same or l42 & l_base:
+        bad.append(f"{mow.CSF_NAME} 同快照 {same} / 与 ra2md.csf 重名 {sorted(l42 & l_base)[:3]}")
+    if bad:
+        fail(f"Mental Omega World 合并有问题: {bad[:8]}")
+    else:
+        print(f"  ok   Mental Omega World：{len(missions)} 个任务追加在菜单末尾，原有 {len(old_b)} 个菜单项与 "
+              f"{len(bc_old.section_names())} 段逐键未动、简报原有 {len(mm_old.section_names())} 段未动；"
+              f"每个任务的地图都在 {mow.MIX_NAME}、都有简报和载入图；{len(l42)} 条字符串与 ra2md.csf 无重名")
+
+
 def check_local(m, art, t_old, t_new, secs):
     """F. Single-purpose changes, plus the optional parts that were built."""
     import re as _re
@@ -537,6 +600,12 @@ def check_local(m, art, t_old, t_new, secs):
                   f"文件逐字节一致、[#include] {', '.join(qm.EXTRA_FILES)} 已部署；东风谷-改 未带入")
     else:
         print("  skip 企鹅包地图：没有快照，这次没生成")
+
+    import mow
+    if mow.available():
+        check_mow(mow)
+    else:
+        print("  skip Mental Omega World：没有快照，这次没生成")
 
     if paths.have_abc():
         csf = Csf(os.path.join(OUT, "ra2md.csf"))
